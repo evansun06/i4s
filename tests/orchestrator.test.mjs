@@ -13,7 +13,12 @@ function fakeProvider(script) {
       const agent =
         /YOUR PERSPECTIVE — (\w+)/.exec(request.system)?.[1].toLowerCase() ??
         'summarizer';
-      calls.push({ kind: request.kind, agent, prompt: request.prompt });
+      calls.push({
+        kind: request.kind,
+        agent,
+        prompt: request.prompt,
+        effort: request.effort,
+      });
       const reply = await script(request.kind, agent, request.prompt);
       const middle = Math.ceil(reply.length / 2);
       yield reply.slice(0, middle);
@@ -589,11 +594,11 @@ test('temperature is boldness; the default leaves prompts unchanged', async () =
   });
   await orchestrator.submit('ideas?');
   assert.doesNotMatch(prompt('yellow'), /boldness/i);
-  assert.match(prompt('yellow'), /it has become essential\.$/);
+  assert.match(prompt('yellow'), /truly matters\.$/);
   const context = { summary: '', recent: [], answered: new Set() };
-  const options = { forced: false, addressed: [] };
+  const options = { forced: false, addressed: [], allowDeep: true };
   const before = draftPrompt(context, { ...options, temperature: 0.5 });
-  assert.equal(before.endsWith('it has become essential.'), true);
+  assert.equal(before.endsWith('truly matters.'), true);
   assert.equal(
     reviewPrompt('draft', context, 0, 0.5).includes('boldness'),
     false,
@@ -640,4 +645,125 @@ test('temperature settings parse from flags and /temp', async () => {
   assert.deepEqual(parseTemperatures('reset', ids), [
     { target: 'all', value: 0.5 },
   ]);
+});
+
+test('an agent can announce deep reasoning; others carry on meanwhile', async () => {
+  const { provider, orchestrator } = room(async (kind, agent, prompt) => {
+    if (kind === 'review') return 'KEEP';
+    if (agent === 'blue') {
+      if (prompt.includes('You just said')) {
+        await delay(20); // high effort takes a while
+        return 'SPEAK\nThe numbers say a $40 price works.';
+      }
+      return "DEEP: I'm going to work through the pricing math.";
+    }
+    if (agent === 'red') {
+      await delay(5);
+      return 'SPEAK\nLaunch in six weeks.';
+    }
+    return 'PASS';
+  });
+  await orchestrator.submit('How should I price this?');
+
+  // The announcement comes first, Red talks while Blue reasons, then Blue's answer.
+  assert.deepEqual(said(orchestrator), [
+    "blue: I'm going to work through the pricing math.",
+    'red: Launch in six weeks.',
+    'blue: The numbers say a $40 price works.',
+  ]);
+  const deep = provider.calls.filter(
+    (c) => c.agent === 'blue' && c.kind === 'draft',
+  );
+  assert.deepEqual(
+    deep.map((c) => c.effort),
+    [undefined, 'high'],
+  );
+  // The deep answer was reviewed against what Red said meanwhile.
+  assert.ok(
+    provider.calls.some((c) => c.agent === 'blue' && c.kind === 'review'),
+  );
+  assert.equal(orchestrator.agentState('blue').activity, 'listening');
+});
+
+test('a second agent wanting to reason deeply waits, then reconsiders', async () => {
+  const states = [];
+  let orchestrator;
+  ({ orchestrator } = room(async (kind, agent, prompt) => {
+    if (kind === 'review') return 'KEEP';
+    if (agent === 'blue') {
+      if (prompt.includes('You just said')) {
+        await delay(20);
+        return 'SPEAK\nPricing: $40.';
+      }
+      return 'DEEP: Let me work out the pricing.';
+    }
+    if (agent === 'green') {
+      // Green wants to dig in too, but only until Blue has answered.
+      if (prompt.includes('BLUE: Pricing: $40.'))
+        return 'SPEAK\nBlue covered it; $40 is fine.';
+      await delay(5);
+      return 'DEEP: I want to check pricing.';
+    }
+    return 'PASS';
+  }));
+  orchestrator.subscribeAgents(
+    (id, state) => id === 'green' && states.push(state.activity),
+  );
+  await orchestrator.submit('Price?');
+
+  assert.deepEqual(said(orchestrator), [
+    'blue: Let me work out the pricing.',
+    'blue: Pricing: $40.',
+    'green: Blue covered it; $40 is fine.',
+  ]);
+  // Green never reasoned at high effort; it waited, then answered normally.
+  assert.ok(states.includes('waiting'));
+  assert.ok(!states.includes('deliberating'));
+});
+
+test('the user can ask agents to think deeply; they run at once, uncapped', async () => {
+  const started = [];
+  const { provider, orchestrator } = room(async (kind, agent, prompt) => {
+    if (kind === 'review') return 'KEEP';
+    if (prompt.includes('You just said')) {
+      started.push([agent, Date.now()]);
+      await delay(15);
+      return `SPEAK\n${agent} thought it through.`;
+    }
+    return 'PASS';
+  });
+  await orchestrator.submit('Design the pricing.', {
+    deep: ['red', 'yellow', 'green'],
+  });
+
+  // No quick draft first: straight to an announcement and a high-effort draft.
+  for (const agent of ['red', 'yellow', 'green']) {
+    const drafts = provider.calls.filter(
+      (c) => c.agent === agent && c.kind === 'draft',
+    );
+    assert.deepEqual(
+      drafts.map((c) => c.effort),
+      ['high'],
+    );
+  }
+  // Blue was not asked, so it drafted normally.
+  assert.deepEqual(
+    provider.calls.filter((c) => c.agent === 'blue').map((c) => c.effort),
+    [undefined],
+  );
+  // Three deep replies, past the cap of two, reasoning side by side.
+  assert.equal(started.length, 3);
+  const spread =
+    Math.max(...started.map(([, t]) => t)) -
+    Math.min(...started.map(([, t]) => t));
+  assert.ok(spread < 15, `started ${spread} ms apart`);
+  const lines = said(orchestrator);
+  assert.equal(
+    lines.filter((line) => line.includes('think this one through')).length,
+    3,
+  );
+  assert.equal(
+    lines.filter((line) => line.includes('thought it through')).length,
+    3,
+  );
 });

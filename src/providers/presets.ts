@@ -15,6 +15,8 @@ export interface ProviderPreset {
   readonly models?: Models;
   readonly maxTokensField: OpenAICompatibleOptions['maxTokensField'];
   readonly extraBody?: OpenAICompatibleOptions['extraBody'];
+  /** How to ask for high reasoning effort; absent means it isn't sent. */
+  readonly highEffort?: OpenAICompatibleOptions['highEffort'];
 }
 
 const every = (model: string): Models => ({
@@ -35,6 +37,7 @@ export const presets = {
     models: every('gemini-3.8-flash'),
     maxTokensField: 'max_tokens',
     extraBody: { reasoning_effort: 'low' },
+    highEffort: { reasoning_effort: 'high' },
   },
   anthropic: {
     label: 'Claude',
@@ -52,6 +55,7 @@ export const presets = {
     keyPattern: /^sk-or-/,
     models: every('openrouter/auto'),
     maxTokensField: 'max_tokens',
+    highEffort: { reasoning: { effort: 'high' } },
   },
   openai: {
     label: 'ChatGPT (OpenAI)',
@@ -61,6 +65,7 @@ export const presets = {
     keyPattern: /^sk-/,
     models: every('gpt-5.5'),
     maxTokensField: 'max_completion_tokens',
+    highEffort: { reasoning_effort: 'high' },
   },
   // Any other OpenAI-compatible server, including local ones; needs --base-url.
   custom: {

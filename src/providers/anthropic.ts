@@ -28,8 +28,9 @@ export class AnthropicProvider implements ModelProvider {
         max_tokens: request.maxOutputTokens,
         system: request.system,
         messages: [{ role: 'user', content: request.prompt }],
-        // Short conversational turns; low effort keeps replies quick.
-        output_config: { effort: 'low' },
+        // Short conversational turns; low effort keeps replies quick unless
+        // the agent asked to think it through.
+        output_config: { effort: request.effort ?? 'low' },
         // If a safety classifier declines, retry on Anthropic's recommended
         // fallback model. Haiku has no server-side fallback.
         ...(!model.startsWith('claude-haiku') && {

@@ -1,7 +1,8 @@
 /new <msg> overrides question and prompts new cycle
 @colour singles out specific agents
-
-Each agent has a temperature from 0 to 1. Before every reply, it becomes a style instruction at the end of that agent's prompt:
+/think prompt all mentioned colours to deep think about a task (use with @colour)
+    - Can also be naturally triggered
+Each agent has a temperature from 0 to 1. Before every reply, it becomes a style instruction at the end of that agents prompt:
 
 ┌─────────┬───────────────────────────────────────────────────────┐
 │  Value  │                What the agent is told                 │
@@ -24,7 +25,7 @@ Each agent has a temperature from 0 to 1. Before every reply, it becomes a style
 └─────────┴───────────────────────────────────────────────────────┘
 
 While chatting:
-/temp                  → shows everyone's temperature
+/temp                  → shows everyones temperature
 /temp 0.8              → everyone
 /temp yellow 0.9       → one agent (also /temp @yellow 0.9)
 /temp yellow=0.9, blue=0.2

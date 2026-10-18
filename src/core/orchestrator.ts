@@ -59,6 +59,12 @@ export interface SavedDiscussion {
 // A ceiling, not a target: thinking models spend part of it before answering.
 const REPLY_TOKENS = 4096;
 const SUMMARY_TOKENS = 4096;
+// High effort spends far more on reasoning before the reply itself.
+const DEEP_TOKENS = 16000;
+/** Deep replies agents may ask for per round, so a round cannot snowball. */
+const MAX_DEEP_PER_ROUND = 2;
+const MANUAL_ANNOUNCEMENT =
+  'You asked me to think this one through, so give me a moment.';
 const MAX_ATTEMPTS = 4;
 const MAX_RETRY_SECONDS = 60;
 
@@ -92,6 +98,11 @@ export class Orchestrator {
   }[] = [];
   /** Agents @mentioned this round; empty means everyone takes part. */
   #mentioned: readonly AgentId[] = [];
+  /** Agents reasoning at high effort right now; others wanting to wait. */
+  readonly #deepActive = new Set<AgentId>();
+  #deepThisRound = 0;
+  /** Agents the user asked to think deeply this round, not yet started. */
+  readonly #deepRequested = new Set<AgentId>();
   readonly #temperatures = new Map<AgentId, number>();
   #floorBusy = false;
   /** Drafts that never saw this log entry are dropped and redrafted. */
@@ -216,10 +227,16 @@ export class Orchestrator {
    *
    * "@blue" or "@red @green" in the message limits this round's replies to
    * those agents. The rest make no calls and simply read the log next round.
+   *
+   * `deep` lists agents to reason at high effort on this message, as if they
+   * had asked to. They skip the per-round cap and do not wait on each other.
    */
   async submit(
     text: string,
-    options: { readonly answer?: boolean } = {},
+    options: {
+      readonly answer?: boolean;
+      readonly deep?: readonly AgentId[];
+    } = {},
   ): Promise<void> {
     if (this.#mode !== 'initial-prompt' && this.#mode !== 'awaiting-user') {
       throw new Error('Wait for the agents to finish before replying.');
@@ -229,6 +246,9 @@ export class Orchestrator {
     this.#pendingQuestion = undefined;
     if (pending) this.#setAgent(pending.agent, 'listening');
     this.#spokeThisRound = false;
+    this.#deepThisRound = 0;
+    this.#deepRequested.clear();
+    for (const id of options.deep ?? []) this.#deepRequested.add(id);
     const event = this.bus.append({
       kind: 'user-message',
       text,
@@ -245,6 +265,8 @@ export class Orchestrator {
     for (const waiter of this.#floorQueue.splice(0)) {
       if (!this.#takesPart(waiter.agent)) waiter.wake('drop');
       else if (pending && !answering) waiter.wake('redraft');
+      // Asked to think deeply: start over rather than use the held draft.
+      else if (this.#deepRequested.has(waiter.agent)) waiter.wake('redraft');
       else this.#floorQueue.push(waiter);
     }
     this.#setMode('running');
@@ -336,11 +358,20 @@ export class Orchestrator {
     }
   }
 
+  /** One draft; with `deep`, the high-effort run after announcing it. */
   async #attempt(
     agent: AgentDefinition,
     forced: boolean,
+    deep?: { readonly announcement: string },
   ): Promise<'done' | 'stale'> {
-    this.#setAgent(agent.id, 'thinking');
+    if (!this.#takesPart(agent.id)) {
+      this.#setAgent(agent.id, 'listening');
+      return 'done';
+    }
+    if (!deep && this.#deepRequested.delete(agent.id)) {
+      return this.#deliberate(agent, forced, MANUAL_ANNOUNCEMENT, true);
+    }
+    this.#setAgent(agent.id, deep ? 'deliberating' : 'thinking');
     await this.#acquireCall();
     const heardUpTo = this.bus.log.length;
     let raw = '';
@@ -355,8 +386,11 @@ export class Orchestrator {
           addressed: this.#mentioned.map(
             (id) => this.#agents.find((other) => other.id === id)?.name ?? id,
           ),
+          allowDeep: !deep && this.#deepThisRound < MAX_DEEP_PER_ROUND,
+          ...(deep && { deepAnnouncement: deep.announcement }),
         }),
-        maxOutputTokens: REPLY_TOKENS,
+        maxOutputTokens: deep ? DEEP_TOKENS : REPLY_TOKENS,
+        ...(deep && { effort: 'high' as const }),
       })) {
         raw += chunk;
         const reply = parseReply(raw, false);
@@ -380,6 +414,9 @@ export class Orchestrator {
       return 'done';
     }
     if (!live && heardUpTo <= this.#discardBefore) return 'stale';
+    if (draft?.action === 'deep' && !deep) {
+      return this.#deliberate(agent, forced, draft.body);
+    }
     const passed = draft?.action !== 'speak' || !draft.body;
     // A pass decided before the user's latest message is not a pass on it.
     if (passed && heardUpTo <= this.#roundStartedAt) return 'stale';
@@ -411,6 +448,72 @@ export class Orchestrator {
       this.#releaseFloor();
     }
     return 'done';
+  }
+
+  /**
+   * The agent asked to reason at high effort. It first tells the others what
+   * it will think through, then drafts again at high effort while the round
+   * goes on. If another agent is already reasoning, this one waits for that
+   * answer and reconsiders, since it may cover the same ground.
+   *
+   * `manual`: the user asked for it, so there is no waiting and no cap.
+   */
+  async #deliberate(
+    agent: AgentDefinition,
+    forced: boolean,
+    announcement: string,
+    manual = false,
+  ): Promise<'done' | 'stale'> {
+    const busy = [...this.#deepActive].find((id) => id !== agent.id);
+    if (!manual && busy !== undefined) {
+      this.#setAgent(agent.id, 'waiting');
+      this.#notice = `${agent.name} is waiting for ${this.#agents.find((other) => other.id === busy)?.name ?? busy} to finish thinking`;
+      this.#changed();
+      await this.#until(
+        () =>
+          this.#deepActive.size === 0 &&
+          this.#mode === 'running' &&
+          !this.#pendingQuestion,
+      );
+      return 'stale';
+    }
+    if (!manual && this.#deepThisRound >= MAX_DEEP_PER_ROUND) {
+      this.#endTurn(agent.id, 'passed');
+      return 'done';
+    }
+
+    this.#deepActive.add(agent.id);
+    this.#deepThisRound += 1;
+    try {
+      const turn = await this.#takeFloor(agent.id);
+      if (turn === 'redraft') return 'stale';
+      if (turn === 'drop') {
+        this.#setAgent(agent.id, 'listening');
+        return 'done';
+      }
+      try {
+        this.#announce(
+          agent.id,
+          announcement || 'Let me think this one through properly.',
+        );
+      } finally {
+        this.#releaseFloor();
+      }
+      return await this.#attempt(agent, forced, { announcement });
+    } finally {
+      this.#deepActive.delete(agent.id);
+      this.#changed();
+    }
+  }
+
+  /** A short message saying the agent is thinking something through. */
+  #announce(agent: AgentId, text: string): void {
+    this.#showSpeech(agent, text);
+    const event = this.bus.append({ kind: 'agent-message', agent, text });
+    this.#lastSpoke.set(agent, event.id);
+    this.#spokeThisRound = true;
+    this.#speaking = undefined;
+    this.#setAgent(agent, 'deliberating');
   }
 
   /** Called while holding the floor: keep, revise, or drop a stale draft. */

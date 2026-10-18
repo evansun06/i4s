@@ -12,6 +12,8 @@ export interface OpenAICompatibleOptions {
   readonly maxTokensField: 'max_tokens' | 'max_completion_tokens';
   /** Provider-specific request fields, such as a reasoning effort. */
   readonly extraBody?: Readonly<Record<string, unknown>>;
+  /** Fields that ask this provider for high reasoning effort. */
+  readonly highEffort?: Readonly<Record<string, unknown>>;
 }
 
 /** Streams `/chat/completions`, which most providers and local servers accept. */
@@ -23,7 +25,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   }
 
   async *generate(request: ModelRequest): AsyncIterable<string> {
-    const { baseUrl, apiKey, models, maxTokensField, extraBody } =
+    const { baseUrl, apiKey, models, maxTokensField, extraBody, highEffort } =
       this.#options;
     const response = await fetch(
       `${baseUrl.replace(/\/$/, '')}/chat/completions`,
@@ -42,6 +44,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
             { role: 'user', content: request.prompt },
           ],
           ...extraBody,
+          ...(request.effort === 'high' && highEffort),
         }),
       },
     );
