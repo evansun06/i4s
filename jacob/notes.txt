@@ -1,7 +1,6 @@
 HIGH:
-agents sound too robotic, needs to more natural and conversatinoal
-make output speed slower, add a fake delay/thinking
-
+Add optinos to adjust the agents, like flexibility, agreeabliity, etc. 
+Make agents able to use higher reasoning
 
 LOW:
 require better api key verification and unfcitonality testing

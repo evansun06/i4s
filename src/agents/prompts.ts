@@ -66,16 +66,41 @@ function render(context: DiscussionContext, markerAt?: number): string {
     : messages;
 }
 
+/** Every agent's normal self; the prompt is unchanged at this value. */
+export const DEFAULT_TEMPERATURE = 0.5;
+
+/**
+ * Temperature as boldness: how strongly an agent's personality comes
+ * through. Simulated in the prompt, so it works on every model. 0 makes the
+ * agents generic and alike, 1 makes each voice as distinct as it can be.
+ * Returns nothing at the default, so default behavior is untouched.
+ */
+export function temperatureGuide(temperature: number): string {
+  const t = Math.min(1, Math.max(0, temperature));
+  if (t === DEFAULT_TEMPERATURE) return '';
+  const dial =
+    t < 0.2
+      ? 'Turn your personality almost all the way down. Answer like a neutral, generic advisor: plain, balanced, standard advice, with little of your usual angle or voice.'
+      : t < DEFAULT_TEMPERATURE
+        ? 'Tone your personality down. Keep your perspective, but be more measured and conventional, closer to how the other advisors sound.'
+        : t < 0.8
+          ? 'Turn your personality up. Lean harder into your perspective and your voice than usual, and take stronger positions.'
+          : 'Turn your personality all the way up. Be the most extreme, distinct version of yourself: your perspective, your voice, and your blind spot at full volume. Push your positions as hard as you can.';
+  return `Your boldness is ${t.toFixed(1)} out of 1, where ${DEFAULT_TEMPERATURE} is your normal self. ${dial} Never invent facts.`;
+}
+
 export interface DraftOptions {
   /** No PASS allowed: the user must get a reply from this agent. */
   readonly forced: boolean;
   /** Names the user @mentioned; only they reply this round. */
   readonly addressed: readonly string[];
+  /** 0 to 1, see `temperatureGuide`. */
+  readonly temperature: number;
 }
 
 export function draftPrompt(
   context: DiscussionContext,
-  { forced, addressed }: DraftOptions,
+  { forced, addressed, temperature }: DraftOptions,
 ): string {
   const who = addressed.length
     ? `The user addressed ${addressed.join(' and ')} directly; only ${addressed.length > 1 ? 'they reply' : 'you reply'} this round, so answer them.`
@@ -85,7 +110,13 @@ export function draftPrompt(
 Reply to the user's latest message from your perspective. ${who}
 ${forced ? '' : `Passing is normal and expected. Reply with only PASS if you have nothing notable to add, if you already made your points in earlier rounds, or if the latest message is outside your perspective. Stay quiet until something raised touches what you care about.\n`}Put SPEAK on the first line, then your reply ${LENGTH}.
 ${questionRule(context)}
-If one of your earlier questions is marked "not answered yet", the user chose to move on; do not repeat it unless it has become essential.`;
+If one of your earlier questions is marked "not answered yet", the user chose to move on; do not repeat it unless it has become essential.${styleLine(temperature)}`;
+}
+
+/** A trailing line for a non-default temperature; empty at the default. */
+function styleLine(temperature: number): string {
+  const guide = temperatureGuide(temperature);
+  return guide ? `\n${guide}` : '';
 }
 
 /** `newFrom` indexes `context.recent`: the first message the draft missed. */
@@ -93,6 +124,7 @@ export function reviewPrompt(
   draft: string,
   context: DiscussionContext,
   newFrom: number,
+  temperature: number,
 ): string {
   return `${render(context, newFrom)}
 
@@ -102,8 +134,8 @@ ${draft}
 Reply with exactly one of:
 KEEP (only that word) if your draft still adds something and does not contradict what was said.
 WITHDRAW (only that word) if others already made substantially the same point. Sharing a topic is not enough.
-REVISE on the first line, then an updated reply ${LENGTH}. Respond to what was said: challenge any flaw your perspective sees, and drop points that were already covered.
-${questionRule(context)}`;
+REVISE on the first line, then an updated reply ${LENGTH}. Respond to what was said by talking directly to whoever said it ("Red, you're assuming..."), not about them: challenge any flaw your perspective sees, and drop points that were already covered.
+${questionRule(context)}${styleLine(temperature)}`;
 }
 
 export const SUMMARIZER_SYSTEM = `You keep the running record of a discussion between a user and four advisors: RED (action), YELLOW (possibilities), GREEN (people), and BLUE (evidence). The advisors rely on your summary instead of the older messages, so precision matters more than brevity.`;

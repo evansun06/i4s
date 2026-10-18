@@ -28,6 +28,8 @@ export interface AgentDefinition {
   readonly name: string;
   readonly perspective: string;
   readonly systemPrompt: string;
+  /** Starting boldness, 0 to 1, simulated in the prompt. Default 0.5. */
+  readonly temperature?: number;
 }
 
 /**
@@ -58,6 +60,8 @@ export interface RoomSnapshot {
   readonly queue: readonly AgentId[];
   /** Agents @mentioned this round, the only ones replying; empty means all. */
   readonly mentioned: readonly AgentId[];
+  /** Each agent's boldness, 0 to 1; 0.5 is its normal self. */
+  readonly temperatures: Readonly<Record<AgentId, number>>;
   readonly speaking?: { readonly agent: AgentId; readonly text: string };
   /** Set while the room waits for the user to answer this question. */
   readonly pendingQuestion?: {

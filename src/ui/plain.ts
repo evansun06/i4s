@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import type { Orchestrator } from '../core/orchestrator.js';
 import type { AgentDefinition, AgentId, RoomSnapshot } from '../core/types.js';
 import { Pacer, type Utterance } from './pacer.js';
+import { parseTemperatures } from './temperature.js';
 
 const COLORS: Record<AgentId, string> = {
   red: '\x1b[31m',
@@ -135,7 +136,34 @@ export async function runPlain(
     showQuestion();
   }
 
-  out.write('\nWelcome to The Idiots! Type "exit" to quit.\n\n');
+  async function setTemperatures(spec: string): Promise<void> {
+    if (spec.trim()) {
+      const settings = parseTemperatures(
+        spec,
+        agents.map((agent) => agent.id),
+      );
+      if (!settings) {
+        out.write(
+          `${DIM}  Use /temp 0.8 for everyone, /temp yellow 0.9 for one agent, or /temp reset (0 = generic, 0.5 = normal, 1 = full personality).${RESET}\n\n`,
+        );
+        return;
+      }
+      for (const { target, value } of settings) {
+        orchestrator.setTemperature(target, value);
+      }
+      // Keep the new setting with the discussion.
+      await options.afterRound?.().catch(() => undefined);
+    }
+    const { temperatures } = orchestrator.snapshot();
+    const line = agents
+      .map(({ id }) => `${name(id)} ${temperatures[id].toFixed(1)}`)
+      .join('  ');
+    out.write(`  Temperature: ${line}\n\n`);
+  }
+
+  out.write(
+    '\nWelcome to The Idiots! Type "exit" to quit, or /temp to set how bold the agents are.\n\n',
+  );
   showRecap();
   try {
     while (true) {
@@ -147,6 +175,13 @@ export async function runPlain(
       ).trim();
       if (!input) continue;
       if (input.toLowerCase() === 'exit') break;
+
+      // "/temp", "/temp 0.8", "/temp yellow 0.9": a command, not a message.
+      const temp = /^\/temp\b\s*(.*)$/i.exec(input);
+      if (temp) {
+        await setTemperatures(temp[1] ?? '');
+        continue;
+      }
 
       // "/new ..." sets a pending question aside and talks to everyone.
       const moveOn = asking !== undefined && /^\/new\b/i.test(input);
