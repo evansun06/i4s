@@ -14,14 +14,16 @@ import {
   useInput,
   useIsScreenReaderEnabled,
   usePaste,
+  useStdout,
   useWindowSize,
   type DOMElement,
 } from 'ink';
 import { agentIds, identities } from '../agents/identity.js';
 import type { AgentId } from '../core/types.js';
-import { complete } from './commands.js';
+import { complete, completionOnEnter } from './commands.js';
 import type { ChatController, PresentationSnapshot } from './controller.js';
 import { edit, editorWindow, type EditorState } from './editor.js';
+import { boldRuns } from './message-text.js';
 import { FloorAnimation, type SpriteAnimations } from './sprites.js';
 import { dimAvatarColor, theme, visibleText } from './theme.js';
 
@@ -48,6 +50,28 @@ export function roomLabel(state: PresentationSnapshot): string {
   if (state.question) return `Answer ${identities[state.question.agent].name}`;
   if (state.room.mode === 'initial-prompt') return 'Ready';
   return state.room.mode === 'running' ? 'Thinking' : 'Your turn';
+}
+
+/** Lines one mouse-wheel notch scrolls. */
+const WHEEL_LINES = 3;
+
+/**
+ * Lines to scroll for a terminal mouse report (SGR encoding, as useInput
+ * delivers it, with or without its escape): wheel up is negative, clicks 0.
+ * Undefined when the input is not a mouse report, so mouse noise is never
+ * typed into the editor.
+ */
+export function mouseWheel(input: string): number | undefined {
+  let lines: number | undefined;
+  for (const [, button] of input
+    .replaceAll('\u001b', '')
+    .matchAll(/\[<(\d+);\d+;\d+[Mm]/g)) {
+    const code = Number(button);
+    lines =
+      (lines ?? 0) +
+      (code === 64 ? -WHEEL_LINES : code === 65 ? WHEEL_LINES : 0);
+  }
+  return lines;
 }
 
 export function floorAgent(state: PresentationSnapshot): AgentId | undefined {
@@ -121,8 +145,14 @@ export function CharacterRow({
                 ))}
               </Box>
             )}
-            <Text color={colors.light} bold>
-              {identities[id].name} <Text color={theme.muted}>{id}</Text>
+            <Text
+              color={dimmed ? dimAvatarColor(colors.light) : colors.light}
+              bold
+            >
+              {identities[id].name}{' '}
+              <Text color={dimmed ? dimAvatarColor(theme.muted) : theme.muted}>
+                {id}
+              </Text>
             </Text>
             <Text color={state.displaying === id ? colors.glow : theme.text}>
               {activityLabel(state, id)}
@@ -145,6 +175,7 @@ export function App({
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const { columns, rows } = useWindowSize();
   const reducedMotion =
     useIsScreenReaderEnabled() || process.env.NO_COLOR !== undefined;
@@ -178,6 +209,25 @@ export function App({
   );
   const bottom = Math.max(0, content.height - chatHeight);
   const offset = Math.min(scrollTop ?? bottom, bottom);
+  /** Scrolling back to the bottom resumes following the live discussion. */
+  const scrollBy = (lines: number) => {
+    const next = Math.max(0, Math.min(bottom, offset + lines));
+    setScrollTop(next >= bottom ? undefined : next);
+  };
+
+  // Have the terminal report the mouse wheel, so it scrolls the chat while the
+  // input bar and characters stay put. Turned off again on exit. Selecting
+  // text with the mouse needs Shift held meanwhile, in most terminals.
+  useEffect(() => {
+    if (!stdout.isTTY) return;
+    const off = () => stdout.write('\u001b[?1000l\u001b[?1006l');
+    stdout.write('\u001b[?1000h\u001b[?1006h');
+    process.once('exit', off);
+    return () => {
+      off();
+      process.off('exit', off);
+    };
+  }, [stdout]);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -222,7 +272,19 @@ export function App({
       quit();
       return;
     }
+    // Mouse reports arrive as input; never type them into the editor.
+    const wheel = mouseWheel(input);
+    if (wheel !== undefined) {
+      if (wheel && !state.closing) scrollBy(wheel);
+      return;
+    }
     if (state.closing) return;
+    // Reading speed, any time, even mid-reply. Ctrl or Alt: terminals never
+    // pass the Command key through.
+    if ((key.ctrl || key.meta) && (input === 'q' || input === 'e')) {
+      controller.adjustReadingSpeed(input === 'e' ? 1 : -1);
+      return;
+    }
     if (key.ctrl && input === 'r') {
       controller.raiseHand();
       return;
@@ -232,14 +294,7 @@ export function App({
       return;
     }
     if (key.pageUp || key.pageDown) {
-      const next = Math.max(
-        0,
-        Math.min(
-          bottom,
-          offset + (key.pageUp ? -1 : 1) * Math.max(1, chatHeight - 1),
-        ),
-      );
-      setScrollTop(next >= bottom ? undefined : next);
+      scrollBy((key.pageUp ? -1 : 1) * Math.max(1, chatHeight - 1));
       return;
     }
     if (key.escape) {
@@ -253,28 +308,42 @@ export function App({
       setDismissed(false);
       return;
     }
+    // Arrows pick a suggestion while the list is open, else scroll the chat.
     if (key.upArrow || key.downArrow) {
       if (suggestions.length) {
         setSelected(
           (selection + (key.upArrow ? -1 : 1) + suggestions.length) %
             suggestions.length,
         );
-      } else {
-        if (historyAt.current === history.current.length)
-          historyDraft.current = editor.text;
-        historyAt.current = Math.max(
-          0,
-          Math.min(
-            history.current.length,
-            historyAt.current + (key.upArrow ? -1 : 1),
-          ),
-        );
-        const text = history.current[historyAt.current] ?? historyDraft.current;
-        setEditor({ text, cursor: text.length });
-      }
+      } else scrollBy(key.upArrow ? -1 : 1);
+      return;
+    }
+    if (key.ctrl && (input === 'p' || input === 'n')) {
+      if (historyAt.current === history.current.length)
+        historyDraft.current = editor.text;
+      historyAt.current = Math.max(
+        0,
+        Math.min(
+          history.current.length,
+          historyAt.current + (input === 'p' ? -1 : 1),
+        ),
+      );
+      const text = history.current[historyAt.current] ?? historyDraft.current;
+      setEditor({ text, cursor: text.length });
       return;
     }
     if (key.return) {
+      // With / or @ suggestions open, Enter completes like Tab; once the
+      // text already matches, it sends.
+      const choice = suggestions.length
+        ? completionOnEnter(editor.text, editor.cursor, selection)
+        : undefined;
+      if (choice) {
+        setEditor({ text: choice.value, cursor: choice.cursor });
+        setSelected(0);
+        setDismissed(false);
+        return;
+      }
       const text = editor.text.trim();
       if (!text) return;
       history.current.push(text);
@@ -293,7 +362,7 @@ export function App({
         ? 'right'
         : key.home || (key.ctrl && input === 'a')
           ? 'home'
-          : key.end || (key.ctrl && input === 'e')
+          : key.end
             ? 'end'
             : key.backspace
               ? 'backspace'
@@ -342,7 +411,8 @@ export function App({
         </Text>
         <Text color={theme.text} wrap="truncate">
           {roomLabel(state)} · {state.room.callsUsed}/{state.room.callLimit}{' '}
-          calls
+          calls ·{' '}
+          {state.wordsPerMinute ? `${state.wordsPerMinute} wpm` : 'instant'}
         </Text>
       </Box>
       <Box height={1} flexShrink={0}>
@@ -389,7 +459,10 @@ export function App({
             return (
               <Box key={message.key} flexDirection="column" marginBottom={1}>
                 <Text color={colors?.light ?? theme.bright}>
-                  <Text color={orb}>{id ? '●' : '·'}</Text> {name}
+                  <Text color={message.speaker === 'user' ? theme.bright : orb}>
+                    {message.speaker === 'system' ? '·' : '●'}
+                  </Text>{' '}
+                  {name}
                   {active ? ' · speaking' : ''}
                   {message.failed ? ' · interrupted' : ''}
                 </Text>
@@ -398,7 +471,13 @@ export function App({
                     message.speaker === 'system' ? theme.muted : theme.text
                   }
                 >
-                  {visibleText(message.text)}
+                  {boldRuns(visibleText(message.text), !message.complete).map(
+                    (run, i) => (
+                      <Text key={i} bold={run.bold}>
+                        {run.text}
+                      </Text>
+                    ),
+                  )}
                 </Text>
               </Box>
             );
@@ -476,8 +555,8 @@ export function App({
       </Box>
       <Box height={1} flexShrink={0}>
         <Text color={theme.muted} wrap="truncate">
-          Ctrl+R raise hand · / commands · Tab complete · PgUp/PgDn history ·
-          Ctrl+C quit
+          / commands · Enter or Tab complete · ↑↓ or wheel scroll · Ctrl+Q/E
+          slower/faster · Ctrl+R raise hand · Ctrl+C quit
         </Text>
       </Box>
     </Box>

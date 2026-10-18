@@ -1,6 +1,7 @@
 HIGH:
 Add a knob adjustment for technical jargon, so a 1 is like full coporate talk, 0 is super simplified language
-
+Allow text speed adjustment while running it
+Update slide deck with ryans implementation
 
 LOW:
 require better api key verification and unfcitonality testing

@@ -20,9 +20,9 @@ The engine currently runs one batch per user message. Messages submitted during 
 
 ## Controls
 
-Type `/` to see commands. Up/Down selects a suggestion, Tab completes it, Escape dismisses suggestions, and Enter submits. `@ruby` and `@red` address the same agent; all four character and color names work. With no suggestions open, Up/Down navigates input history. Left/Right, Home/End, Backspace/Delete, Ctrl+A/E/U, and paste edit the input. Paste line breaks become spaces.
+Type `/` to see commands. While suggestions are open, Up/Down selects one, and Tab or Enter completes it; Enter submits once the text already matches the selection, so a fully typed `/help` runs on the first Enter. Escape dismisses suggestions. `@ruby` and `@red` address the same agent; all four character and color names work. Ctrl+P/Ctrl+N step through input history. Left/Right, Home/End, Backspace/Delete, Ctrl+A/U, and paste edit the input. Paste line breaks become spaces.
 
-Page Up/Down scroll the transcript. Ctrl+End returns to following live output. Ordinary `q` is text; `/quit` or Ctrl+C saves committed conversation and exits.
+With no suggestions open, Up/Down scroll the transcript a line at a time, the mouse wheel three lines, and Page Up/Down a page; the input bar and characters stay in place. Ctrl+End returns to following live output, as does scrolling back to the bottom. The app turns on terminal mouse reporting (SGR) for the wheel and turns it off on exit; most terminals still select text with Shift held. Agents' `**bold**` Markdown is shown in bold without the asterisks. Ctrl+Q/Ctrl+E (or Alt+Q/Alt+E) lower or raise reading speed by 40 WPM, between 100 and 1000, at any time including mid-reply; the top bar shows the current speed. Terminals don't pass the Command key to applications, so there is no Cmd binding. Ordinary `q` is text; `/quit` or Ctrl+C saves committed conversation and exits.
 
 | Command                                  | Action                                                 |
 | ---------------------------------------- | ------------------------------------------------------ |
@@ -35,7 +35,7 @@ Page Up/Down scroll the transcript. Ctrl+End returns to following live output. O
 | `/queue`, `/unqueue`                     | Show queued messages or remove the latest one          |
 | `/quit`                                  | Save and exit                                          |
 
-Reading speed defaults to 340 WPM. `npm run dev -- --wpm 0` displays text as it arrives. Use `--call-limit 100` to set the logical model-request ceiling; reviews and summaries count, while rate-limit retries reuse the request reservation. `--provider`, `--model`, and `--base-url` can override setup choices. `--plain` retains the original transcript interface and its existing commands.
+Reading speed starts at 340 WPM, or at `--wpm`; Ctrl+Q/Ctrl+E adjust it during the session. `npm run dev -- --wpm 0` displays text as it arrives. Use `--call-limit 100` to set the logical model-request ceiling; reviews and summaries count, while rate-limit retries reuse the request reservation. `--provider`, `--model`, and `--base-url` can override setup choices. `--plain` retains the original transcript interface and its existing commands.
 
 Use a true-color terminal at least 76 columns by 24 rows for the full character row. Smaller terminals show compact name/state badges. `NO_COLOR` disables color and animation; names and status text remain available. The TUI uses the exact RGB entries in `src/assets/pallette/idiots.gpl`; sprite pixels retain their hand-drawn colors.
 
