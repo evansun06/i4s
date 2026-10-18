@@ -1,14 +1,9 @@
 HIGH:
-Make agents able to use higher reasoning
+Add a knob adjustment for technical jargon, so a 1 is like full coporate talk, 0 is super simplified language
+
 
 LOW:
 require better api key verification and unfcitonality testing
 Only has support for gemeni, cahtgpt, claude
 
-
-
-- Listening fixes what the agent knows about the conversation: "since I raised my hand, Red already made my point." We have this.
-- Research fixes what the agent knows about the world, or how hard it thinks. We don't have this. Every turn uses low reasoning effort, a capped reply length, and no web access. So an in-depth request gets the same treatment as a simple one, and agents can only use what the model already knows.
-
-If you only care about talking and listening right now, the current version is enough, and research can wait. When you want it, the cheap first step is the "deep" bid I described. An agent that flags its point as deep gets a turn with higher effort and a bigger budget, and nothing else changes.
 

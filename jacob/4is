@@ -2,6 +2,8 @@
 @colour singles out specific agents
 /think prompt all mentioned colours to deep think about a task (use with @colour)
     - Can also be naturally triggered
+Enter during agents talking will raise your hand and give you the floor 
+/angry makes them angry
 Each agent has a temperature from 0 to 1. Before every reply, it becomes a style instruction at the end of that agents prompt:
 
 ┌─────────┬───────────────────────────────────────────────────────┐

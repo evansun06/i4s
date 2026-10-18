@@ -22,6 +22,8 @@ Usage: i4s [options]
                        normal. "0.7" for everyone, or
                        per agent, e.g. "yellow=0.9,blue=0.2". Change it while
                        chatting with /temp.
+  --angry              Start with angry mode on: the advisors take offense
+                       and insult each other. Toggle it with /angry.
   --forget-key         Remove the saved key for --provider (or the last used)
   -h, --help           Show this help
   -v, --version        Show the version
@@ -43,6 +45,7 @@ async function main() {
       'call-limit': { type: 'string' },
       wpm: { type: 'string' },
       temperature: { type: 'string' },
+      angry: { type: 'boolean' },
       'forget-key': { type: 'boolean' },
     },
     allowPositionals: false,
@@ -162,6 +165,7 @@ async function main() {
     ...(session && { restore: session.discussion }),
   });
   // A flag given now wins over what the discussion was saved with.
+  if (values.angry) orchestrator.setAngry(true);
   for (const { target, value } of temperatures) {
     orchestrator.setTemperature(target, value);
   }

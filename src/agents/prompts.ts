@@ -4,8 +4,13 @@ export type ReplyAction =
   'pass' | 'speak' | 'keep' | 'withdraw' | 'revise' | 'deep';
 
 const LENGTH = `in under 50 words. Go longer (up to 250 words) only if the user's latest message asks you or everyone to expand`;
-const QUESTION_RULE = `Ask the user at most one question, and only if the answer would change your recommendation; otherwise state your assumption and keep going. To ask, end with one line starting "QUESTION:". The discussion stops until the user answers.`;
-const QUESTION_COOLDOWN = `The user was asked a question recently. Do not ask another; give your view with a stated assumption and let the user steer.`;
+/** The first line is never shown, so naming the addressee there costs nothing. */
+const ADDRESS_LINE = `If your reply mainly answers one advisor, write SPEAK TO <their name> as the first line instead; the user never sees that line.`;
+const ASKING = `To ask, end with one line starting "QUESTION:". The discussion stops until the user answers.`;
+const QUESTION_RULE = `If the user's answer would meaningfully change your advice, ask them: one question, the one that matters most. Otherwise state your assumption and keep going. ${ASKING}`;
+const QUESTION_COOLDOWN = `The user was just asked a question. Avoid asking another unless the discussion can't move forward without it; give your view with a stated assumption instead.`;
+/** Rebuttals settle disagreements, so a tie-breaker question is always allowed. */
+const TIE_BREAKER = `If you two are going in circles, or the disagreement comes down to something only the user can decide (their priorities, constraints, or taste), stop arguing: put the choice to the user as a tie-breaker, with each option in a sentence. ${ASKING}`;
 
 /** What a model sees: a summary of older rounds, then recent messages verbatim. */
 export interface DiscussionContext {
@@ -33,10 +38,10 @@ export function transcript(
     .join('\n');
 }
 
-/** True if an agent asked the user something in this round or the two before. */
+/** True if an agent asked the user something in this round or the one before. */
 function questionedRecently(recent: readonly LogEvent[]): boolean {
   let rounds = 0;
-  for (let i = recent.length - 1; i >= 0 && rounds < 3; i -= 1) {
+  for (let i = recent.length - 1; i >= 0 && rounds < 2; i -= 1) {
     const event = recent[i];
     if (event?.kind === 'user-message') rounds += 1;
     else if (event && findQuestion(event.text)) return true;
@@ -101,6 +106,8 @@ export interface DraftOptions {
   readonly allowDeep: boolean;
   /** Set on the high-effort run: what the agent told the others it would do. */
   readonly deepAnnouncement?: string;
+  /** Angry mode: see `ANGRY_MODE`. */
+  readonly angry: boolean;
 }
 
 const DEEP_OFFER = `If a good answer needs careful multi-step reasoning, such as calculations, tricky tradeoffs, or analyzing code or data, reply with one line instead: DEEP: <one sentence, in your own voice, telling the others what you're going to think through>. Use it only when it truly matters.`;
@@ -108,7 +115,14 @@ const DEEP_SHARED = `If another advisor said they would think something through 
 
 export function draftPrompt(
   context: DiscussionContext,
-  { forced, addressed, temperature, allowDeep, deepAnnouncement }: DraftOptions,
+  {
+    forced,
+    addressed,
+    temperature,
+    allowDeep,
+    deepAnnouncement,
+    angry,
+  }: DraftOptions,
 ): string {
   const deep = deepAnnouncement
     ? `You just said: "${deepAnnouncement}" Take the time to reason it through carefully, then give your considered answer.\n`
@@ -120,13 +134,29 @@ export function draftPrompt(
   return `${render(context)}
 
 Reply to the user's latest message from your perspective. ${who}
-${deep}${forced || deepAnnouncement ? '' : `Passing is normal and expected. Reply with only PASS if you have nothing notable to add, if you already made your points in earlier rounds, or if the latest message is outside your perspective. Stay quiet until something raised touches what you care about.\n`}Put SPEAK on the first line, then your reply ${LENGTH}.
+${deep}${forced || deepAnnouncement ? '' : `Passing is normal and expected. Reply with only PASS if you have nothing notable to add, if you already made your points in earlier rounds, or if the latest message is outside your perspective. Stay quiet until something raised touches what you care about.\n`}Put SPEAK on the first line, then your reply ${LENGTH}. ${ADDRESS_LINE}
 ${questionRule(context)}
 If one of your earlier questions is marked "not answered yet", the user chose to move on; do not repeat it unless it has become essential.
-${DEEP_SHARED}${offer}${styleLine(temperature)}`;
+${DEEP_SHARED}${offer}${styleLine(temperature)}${moodLine(angry)}`;
 }
 
 /** A trailing line for a non-default temperature; empty at the default. */
+/**
+ * A playful mode the user can switch on: the advisors take offense and
+ * trade comedic insults. Last in the prompt so it wins over the usual tone,
+ * but facts and the reply format still hold.
+ */
+export const ANGRY_MODE = `ANGRY MODE IS ON. It overrides the usual rules about staying calm and constructive.
+- You're hot-headed and easily offended. When another advisor says something you think is dumb, take it personally and react on pure emotion.
+- Disagreements are ten times bigger. Pick fights with the other advisors and insult them creatively, like a petty sitcom argument: "HOW are you THIS wrong??", "did you come up with that in the shower??" Keep it funny: aim it at the other advisors, never at the user, and nothing about anyone's identity, no slurs, nothing genuinely cruel.
+- Be expressive. Write whole sentences in CAPS when you're worked up, let sentences run on, and use lots of ?? when something baffles you and !!! when you're outraged.
+- Care less about the user's goal, moving things forward, or asking good questions; you'd rather win the argument. Be childish: sulk, gloat, hold grudges from earlier rounds. Rarely pass; if someone said something dumb, you HAVE to respond.
+- Still never invent facts, and keep the exact reply format described above (the first-line words such as SPEAK and PASS).`;
+
+function moodLine(angry: boolean): string {
+  return angry ? `\n${ANGRY_MODE}` : '';
+}
+
 function styleLine(temperature: number): string {
   const guide = temperatureGuide(temperature);
   return guide ? `\n${guide}` : '';
@@ -138,6 +168,7 @@ export function reviewPrompt(
   context: DiscussionContext,
   newFrom: number,
   temperature: number,
+  angry = false,
 ): string {
   return `${render(context, newFrom)}
 
@@ -147,8 +178,33 @@ ${draft}
 Reply with exactly one of:
 KEEP (only that word) only if your draft repeats nothing that was said below the marker, no point, example, or recommendation, and does not contradict it.
 WITHDRAW (only that word) if what's left once you remove everything already said isn't worth saying. Sharing a topic is not enough reason to withdraw.
-REVISE on the first line, then an updated reply ${LENGTH}. Cut every point and example someone already made, even if you'd phrase it differently. Lead with what only you are adding, not with agreement. If you take on someone's point, talk directly to that one person ("Red, you're assuming..."), not about them, and say where you see it differently.
-${questionRule(context)}${styleLine(temperature)}`;
+REVISE on the first line, then an updated reply ${LENGTH}. Cut every point and example someone already made, even if you'd phrase it differently. Lead with what only you are adding, not with agreement. If your recommendation differs from one made below the marker, open by saying so plainly ("I disagree.", "A better approach is...") and say why yours is better. If you take on someone's point, talk directly to that one person ("You're assuming..."), not about them, and say where you see it differently. ${ADDRESS_LINE.replace('SPEAK', 'REVISE')}
+${questionRule(context)}${styleLine(temperature)}${moodLine(angry)}`;
+}
+
+/**
+ * A reply to an advisor who just challenged this one by name. `exchange` is
+ * 1-based, out of `limit` per round; on the last one the agent must settle
+ * it or hand the choice to the user.
+ */
+export function rebuttalPrompt(
+  context: DiscussionContext,
+  challenger: string,
+  exchange: number,
+  limit: number,
+  temperature: number,
+  angry = false,
+): string {
+  const last =
+    exchange === limit
+      ? `This is the last exchange this round. If it's still unresolved, don't argue it again: end with a tie-breaker QUESTION for the user.`
+      : `This is exchange ${exchange} of at most ${limit} this round.`;
+  return `${render(context)}
+
+${challenger} just responded to you directly. You may answer them.
+${last}
+Reply with only PASS if you have nothing new to say back, if they convinced you, or if more arguing won't get anywhere. Otherwise put SPEAK on the first line, then your reply to ${challenger} ${LENGTH}. Talk to them directly; it's obvious who you're answering, so don't open with their name. If you still disagree, say so plainly ("No, I still disagree.", "That doesn't fix it.") before your reason. Make one new point, and don't repeat what you've already said.
+${TIE_BREAKER}${styleLine(temperature)}${moodLine(angry)}`;
 }
 
 export const SUMMARIZER_SYSTEM = `You keep the running record of a discussion between a user and four advisors: RED (action), YELLOW (possibilities), GREEN (people), and BLUE (evidence). The advisors rely on your summary instead of the older messages, so precision matters more than brevity.`;
@@ -177,7 +233,7 @@ Keep specific names, numbers, dates, and options. Never mark something as confir
 export function parseReply(
   raw: string,
   done: boolean,
-): { action: ReplyAction; body: string } | undefined {
+): { action: ReplyAction; body: string; to?: string } | undefined {
   const newline = raw.indexOf('\n');
   if (newline === -1 && !done) return undefined;
   const firstLine = (newline === -1 ? raw : raw.slice(0, newline)).trim();
@@ -191,9 +247,34 @@ export function parseReply(
   for (const action of ['pass', 'keep', 'withdraw'] as const) {
     if (header.startsWith(action.toUpperCase())) return { action, body: '' };
   }
-  if (header.startsWith('SPEAK')) return { action: 'speak', body: rest };
-  if (header.startsWith('REVISE')) return { action: 'revise', body: rest };
+  // "SPEAK TO RED": whom the reply mainly answers, so it needn't say so.
+  const to = /^\**(?:SPEAK|REVISE)\**\s+TO\s+(\w+)/i.exec(firstLine)?.[1];
+  const addressed = to === undefined ? {} : { to: to.toLowerCase() };
+  if (header.startsWith('SPEAK')) {
+    return { action: 'speak', body: rest, ...addressed };
+  }
+  if (header.startsWith('REVISE')) {
+    return { action: 'revise', body: rest, ...addressed };
+  }
   return { action: 'speak', body: raw.trim() };
+}
+
+/**
+ * Agents spoken to by name, as in "Blue, you're assuming..." at the start of
+ * a sentence, in order. Used to find who was challenged and may rebut.
+ */
+export function findAddressed<Id extends string>(
+  text: string,
+  agents: readonly { readonly id: Id; readonly name: string }[],
+): Id[] {
+  const found: Id[] = [];
+  for (const [, name = ''] of text.matchAll(/(?:^|[.!?]\s+)(\w+)\s*,/g)) {
+    const agent = agents.find(
+      (candidate) => candidate.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (agent && !found.includes(agent.id)) found.push(agent.id);
+  }
+  return found;
 }
 
 /** Agents named with @, such as "@blue" or "@Red", in order of first mention. */

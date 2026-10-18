@@ -16,6 +16,7 @@ type Item =
   | {
       readonly kind: 'speech';
       readonly label: string;
+      readonly speaker: string | undefined;
       text: string;
       finished: boolean;
       wake?: (() => void) | undefined;
@@ -37,6 +38,7 @@ export class Pacer {
   readonly #idleWaiters: (() => void)[] = [];
   #running = false;
   #spokeLast = false;
+  #showing: string | undefined;
 
   constructor(write: (text: string) => void, options: PacerOptions) {
     this.#write = write;
@@ -49,10 +51,16 @@ export class Pacer {
     this.#run();
   }
 
-  speech(label: string): Utterance {
+  /** Who is on screen right now, which may trail the engine's speaker. */
+  get showing(): string | undefined {
+    return this.#showing;
+  }
+
+  speech(label: string, speaker?: string): Utterance {
     const item: Item & { kind: 'speech' } = {
       kind: 'speech',
       label,
+      speaker,
       text: '',
       finished: false,
     };
@@ -111,6 +119,7 @@ export class Pacer {
 
   async #speak(item: Item & { kind: 'speech' }): Promise<void> {
     const charsPerSecond = (this.#options.wordsPerMinute * CHARS_PER_WORD) / 60;
+    this.#showing = item.speaker;
     this.#write(item.label);
     let shown = 0;
     // Letter by letter. Timers cannot fire once per letter reliably, so each
@@ -147,6 +156,7 @@ export class Pacer {
       }
     }
     this.#write('\n\n');
+    this.#showing = undefined;
   }
 }
 

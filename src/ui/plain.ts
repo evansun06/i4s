@@ -1,3 +1,4 @@
+import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import type { Orchestrator } from '../core/orchestrator.js';
 import type { AgentDefinition, AgentId, RoomSnapshot } from '../core/types.js';
@@ -28,11 +29,6 @@ export async function runPlain(
   } = {},
 ): Promise<void> {
   const out = process.stdout;
-  const terminal = createInterface({ input: process.stdin, output: out });
-  terminal.on('SIGINT', () => {
-    terminal.close();
-    process.exit(130);
-  });
   const agentName = (id: AgentId) =>
     agents.find((agent) => agent.id === id)?.name ?? id;
   const name = (id: AgentId) => `${COLORS[id]}${agentName(id)}${RESET}`;
@@ -43,9 +39,54 @@ export async function runPlain(
     wordsPerMinute,
     pauseBetweenSpeakersMs: wordsPerMinute ? 1000 : 0,
   });
+  // A reply joins the discussion only once the one before it is on screen,
+  // so a raised hand lands right after what you are reading.
+  orchestrator.setDisplayGate(() => pacer.idle());
   const status = (line: string) => pacer.line(`${DIM}  · ${line}${RESET}\n`);
   let current: { agent: AgentId; utterance: Utterance } | undefined;
   let askingForBudget = false;
+
+  /** One prompt. Keys are not watched while it is open. */
+  async function ask(prompt: string): Promise<string> {
+    stopWatchingKeys();
+    const terminal = createInterface({ input: process.stdin, output: out });
+    terminal.on('SIGINT', () => {
+      terminal.close();
+      process.exit(130);
+    });
+    try {
+      return (await terminal.question(prompt)).trim();
+    } finally {
+      terminal.close();
+    }
+  }
+
+  // While agents talk, keys are read directly, so nothing is echoed or
+  // redrawn over their replies. Enter raises your hand.
+  const onKey = (
+    _text: string | undefined,
+    key: { name?: string; ctrl?: boolean } | undefined,
+  ) => {
+    if (key?.ctrl && key.name === 'c') process.exit(130);
+    if (key?.name !== 'return' && key?.name !== 'enter') return;
+    if (!orchestrator.raiseHand()) return;
+    // Shown at once, not queued behind the replies still being displayed.
+    const speaker = pacer.showing;
+    out.write(
+      `\n${BOLD}  ✋ Hand raised${RESET}${DIM}: you have the floor ${speaker ? `once ${speaker} finishes` : 'next'}.${RESET}\n`,
+    );
+  };
+  function watchKeys(): void {
+    if (!process.stdin.isTTY) return;
+    emitKeypressEvents(process.stdin);
+    process.stdin.setRawMode(true);
+    process.stdin.on('keypress', onKey);
+    process.stdin.resume();
+  }
+  function stopWatchingKeys(): void {
+    process.stdin.off('keypress', onKey);
+    if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  }
 
   let previous: RoomSnapshot = orchestrator.snapshot();
   orchestrator.subscribe(() => {
@@ -55,7 +96,10 @@ export async function runPlain(
       current?.utterance.finish();
       current = next.speaking && {
         agent: next.speaking.agent,
-        utterance: pacer.speech(`\n${name(next.speaking.agent)}: `),
+        utterance: pacer.speech(
+          `\n${name(next.speaking.agent)}: `,
+          agentName(next.speaking.agent),
+        ),
       };
     }
     if (next.speaking) current?.utterance.update(next.speaking.text);
@@ -78,16 +122,12 @@ export async function runPlain(
   });
 
   async function askForMoreCalls(): Promise<void> {
-    const answer = await terminal.question(
-      'Add how many calls? (Enter to quit) ',
-    );
-    const extra = Number(answer.trim());
-    if (!Number.isInteger(extra) || extra <= 0) {
-      terminal.close();
-      process.exit(0);
-    }
+    const answer = await ask('Add how many calls? (Enter to quit) ');
+    const extra = Number(answer);
+    if (!Number.isInteger(extra) || extra <= 0) process.exit(0);
     orchestrator.raiseCallLimit(extra);
     orchestrator.resume();
+    if (orchestrator.snapshot().mode === 'running') watchKeys();
   }
 
   function showQuestion(): void {
@@ -166,7 +206,9 @@ export async function runPlain(
       '',
       'Welcome to The Idiots! Type "exit" to quit.',
       `${DIM}  /think blue <message>  ask an agent to think it through (/think <message> for all)`,
-      `  /temp yellow 0.9       set how bold an agent is (/temp to see all)${RESET}`,
+      `  /temp yellow 0.9       set how bold an agent is (/temp to see all)`,
+      `  /angry                 toggle angry mode (/angry on, /angry off)`,
+      `  Enter while they talk  raise your hand; you speak after the current speaker${RESET}`,
       '',
       '',
     ].join('\n'),
@@ -175,13 +217,31 @@ export async function runPlain(
   try {
     while (true) {
       const asking = orchestrator.snapshot().pendingQuestion;
-      const input = (
-        await terminal.question(
-          asking ? `Answer ${name(asking.agent)}: ` : 'You: ',
-        )
-      ).trim();
+      const input = await ask(
+        asking
+          ? `Answer ${name(asking.agent)}: `
+          : orchestrator.snapshot().handRaised
+            ? `${BOLD}✋ You:${RESET} `
+            : 'You: ',
+      );
       if (!input) continue;
       if (input.toLowerCase() === 'exit') break;
+
+      // "/angry", "/angry on", "/angry off": a command, not a message.
+      const angry = /^\/angry\b\s*(on|off)?\s*$/i.exec(input);
+      if (angry) {
+        const on = angry[1]
+          ? angry[1].toLowerCase() === 'on'
+          : !orchestrator.snapshot().angry;
+        orchestrator.setAngry(on);
+        await options.afterRound?.().catch(() => undefined);
+        out.write(
+          on
+            ? `${BOLD}  😤 ANGRY MODE ON.${RESET}${DIM} The advisors are spoiling for a fight. /angry off to calm them down.${RESET}\n\n`
+            : `${DIM}  Angry mode off. Back to civil.${RESET}\n\n`,
+        );
+        continue;
+      }
 
       // "/temp", "/temp 0.8", "/temp yellow 0.9": a command, not a message.
       const temp = /^\/temp\b\s*(.*)$/i.exec(input);
@@ -221,6 +281,7 @@ export async function runPlain(
       if (!text) continue;
 
       pacer.newRound();
+      watchKeys();
       const round = orchestrator.submit(text, {
         answer: !moveOn,
         ...(deep && { deep }),
@@ -246,6 +307,7 @@ export async function runPlain(
       showQuestion();
     }
   } finally {
-    terminal.close();
+    stopWatchingKeys();
+    process.stdin.pause();
   }
 }
