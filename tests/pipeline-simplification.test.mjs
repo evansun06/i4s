@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildDecisionGraph } from '../dist/step2/buildDecisionGraph.js';
-import { finalizePlanningGraphs } from '../dist/step2/finalize.js';
+import { buildDecisionGraph } from '../dist/drawing/excalidraw/step2/buildDecisionGraph.js';
+import { finalizePlanningGraphs } from '../dist/drawing/excalidraw/step2/finalize.js';
 import {
   FinalOrchestrator,
   graphPrompt,
   extractionPrompt,
-} from '../dist/finalOrchestrator.js';
-import { compactKnowledge, presentationContext } from '../dist/modelContext.js';
+} from '../dist/drawing/excalidraw/finalOrchestrator.js';
+import {
+  compactKnowledge,
+  presentationContext,
+} from '../dist/drawing/excalidraw/modelContext.js';
 import {
   bookSwap,
   seedConversation,
   specification,
   fakeProvider,
-} from './helpers.mjs';
+} from './pipeline/helpers.mjs';
 
 test('canonical decision projection preserves every decision/option without a model or input mutation', async () => {
   const data = bookSwap();

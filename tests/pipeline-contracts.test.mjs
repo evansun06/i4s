@@ -6,8 +6,8 @@ import {
   strictWireSchema,
   normalizeWireValue,
   validateSchema,
-} from '../dist/contracts.js';
-import { ingestConversation } from '../dist/conversation.js';
+} from '../dist/drawing/excalidraw/contracts.js';
+import { ingestConversation } from '../dist/drawing/excalidraw/conversation.js';
 
 const base = {
   id: 'entity',

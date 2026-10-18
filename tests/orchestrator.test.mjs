@@ -1248,3 +1248,64 @@ test('a clarification holds queued drafts, which review the answer and withdraw 
   assert.match(review.prompt, /USER: Warehouse staff/);
   assert.equal(orchestrator.snapshot().pendingQuestion, undefined);
 });
+
+/**
+ * Ruby streams half a reply, then hangs until cancelled; everyone else
+ * passes. From the second round on, Ruby answers at once.
+ */
+function interruptible() {
+  const streaming = Promise.withResolvers();
+  const state = { round: 1, calls: 0, streaming: streaming.promise };
+  const provider = {
+    async *generate(request) {
+      state.calls++;
+      const agent = panel.find(
+        (candidate) => candidate.systemPrompt === request.system,
+      )?.id;
+      if (request.kind !== 'draft' || agent !== 'red') {
+        yield 'PASS';
+        return;
+      }
+      if (state.round > 1) {
+        yield 'SPEAK\nAfter the interruption.';
+        return;
+      }
+      yield 'SPEAK\nThe first half of a long ';
+      streaming.resolve();
+      await new Promise((_, fail) =>
+        request.signal.addEventListener(
+          'abort',
+          () => fail(request.signal.reason),
+          { once: true },
+        ),
+      );
+    },
+  };
+  return { provider, state };
+}
+
+test('interrupt stops the speaker mid-reply, saves nothing for them, and ends the round', async (t) => {
+  const { provider, state } = interruptible();
+  const orchestrator = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit: 50,
+  });
+  t.after(() => orchestrator.dispose());
+  assert.equal(orchestrator.interrupt(), false); // nothing running yet
+  const first = orchestrator.submit('Help me decide.');
+  await state.streaming;
+  await settle();
+  assert.equal(orchestrator.snapshot().speaking?.agent, 'red');
+  assert.equal(orchestrator.interrupt(), true);
+  await first;
+  const room = orchestrator.snapshot();
+  assert.equal(room.mode, 'awaiting-user');
+  assert.equal(room.speaking, undefined);
+  assert.equal(room.notice, undefined, 'an interruption is not an error');
+  assert.deepEqual(said(orchestrator), []);
+  // Ruby redrafts after the user's next message.
+  state.round = 2;
+  await orchestrator.submit('Go on.');
+  assert.deepEqual(said(orchestrator), ['red: After the interruption.']);
+});

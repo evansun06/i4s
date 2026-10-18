@@ -5,10 +5,14 @@ import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { reusableExtraction } from '../dist/step1/reuse.js';
-import { extractionSchema } from '../dist/contracts.js';
-import { validateKnowledge } from '../dist/step1/validate.js';
-import { bookSwap, seedConversation, specification } from './helpers.mjs';
+import { reusableExtraction } from '../dist/drawing/excalidraw/step1/reuse.js';
+import { extractionSchema } from '../dist/drawing/excalidraw/contracts.js';
+import { validateKnowledge } from '../dist/drawing/excalidraw/step1/validate.js';
+import {
+  bookSwap,
+  seedConversation,
+  specification,
+} from './pipeline/helpers.mjs';
 
 test('extraction reuse checks exact inputs and revalidates knowledge, not just saved reports', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'i4s-extraction-cache-'));
@@ -107,8 +111,8 @@ test('CLI reuses validated extraction in a fresh run, charges only actual calls 
       process.execPath,
       [
         '--import',
-        new URL('./fake-openai.mjs', import.meta.url).pathname,
-        'dist/cli.js',
+        new URL('./pipeline/fake-openai.mjs', import.meta.url).pathname,
+        'dist/drawing/excalidraw/cli.js',
         '--out',
         parent,
         '--reuse-extraction',

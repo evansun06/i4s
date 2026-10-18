@@ -11,6 +11,7 @@ import {
   saveSettings,
 } from '../storage/credentials.js';
 import { listSessions, type Session } from '../storage/sessions.js';
+import { MENU_PROVIDERS } from './keys.js';
 import { promptTheme, ansiColor, theme, visibleText } from './theme.js';
 
 const RECENT_SESSIONS = 15;
@@ -22,6 +23,7 @@ export async function chooseSession(): Promise<Session | undefined> {
   if (!sessions.length) return undefined;
   const choice = await select<string>({
     theme: promptTheme,
+    loop: false,
     message: 'Start a new discussion or continue one?',
     choices: [
       { name: choiceText('New discussion'), value: '' },
@@ -36,7 +38,7 @@ export async function chooseSession(): Promise<Session | undefined> {
   return sessions.find((session) => session.id === choice);
 }
 
-function when(iso: string): string {
+export function when(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -53,14 +55,6 @@ export interface ChosenProvider {
 interface FoundKey extends ChosenProvider {
   readonly fromEnv: boolean;
 }
-
-// Custom endpoints need --base-url, so they are only reachable through flags.
-const MENU_PROVIDERS = [
-  'gemini',
-  'anthropic',
-  'openai',
-  'openrouter',
-] as const satisfies readonly ProviderId[];
 
 /**
  * Picks the provider and key for this session. With `--provider`, uses that
@@ -84,6 +78,7 @@ export async function chooseProvider(
     const choice = found.length
       ? await select<ProviderId | 'add'>({
           theme: promptTheme,
+          loop: false,
           message: 'Which provider should the panel use?',
           choices: [
             ...found.map((key) => ({
@@ -135,6 +130,7 @@ async function addKey(provider?: ProviderId): Promise<ChosenProvider> {
     detectProvider(apiKey) ??
     (await select<ProviderId>({
       theme: promptTheme,
+      loop: false,
       message: 'Which provider is this key for?',
       choices: MENU_PROVIDERS.map((id) => ({
         name: choiceText(presets[id].label),

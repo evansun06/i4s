@@ -62,7 +62,13 @@ const result = finalizePlanningGraphs(
     diagnostic = value;
   },
 );
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'runs');
+const root = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'runs',
+);
 const output = await mkdtemp(
   join(root, `${new Date().toISOString().replaceAll(':', '-')}-audit-`),
 );

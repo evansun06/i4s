@@ -1,6 +1,6 @@
 // Explicit child-process integration-test provider. No production fallback.
 import { readFile } from 'node:fs/promises';
-import { defaultPresentation } from '../dist/rendering/presentation.js';
+import { defaultPresentation } from '../../dist/drawing/excalidraw/rendering/presentation.js';
 import { presentationDesign } from './helpers.mjs';
 const knowledge = JSON.parse(
   await readFile(

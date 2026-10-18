@@ -9,20 +9,23 @@ import {
   presentationDesignSchema,
   presentationTextLimits,
   validatePresentation,
-} from '../dist/rendering/presentation.js';
-import { strictWireSchema, validateSchema } from '../dist/contracts.js';
-import { buildExcalidrawScene } from '../dist/rendering/buildExcalidrawScene.js';
-import { presentationDesign } from './helpers.mjs';
+} from '../dist/drawing/excalidraw/rendering/presentation.js';
+import {
+  strictWireSchema,
+  validateSchema,
+} from '../dist/drawing/excalidraw/contracts.js';
+import { buildExcalidrawScene } from '../dist/drawing/excalidraw/rendering/buildExcalidrawScene.js';
+import { presentationDesign } from './pipeline/helpers.mjs';
 
 const knowledge = JSON.parse(
   await readFile(
-    new URL('./fixtures/step1-knowledge.json', import.meta.url),
+    new URL('./pipeline/fixtures/step1-knowledge.json', import.meta.url),
     'utf8',
   ),
 ).knowledgeGraph;
 const graphs = JSON.parse(
   await readFile(
-    new URL('./fixtures/step2-planning.json', import.meta.url),
+    new URL('./pipeline/fixtures/step2-planning.json', import.meta.url),
     'utf8',
   ),
 ).planningGraphs;

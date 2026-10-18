@@ -31,7 +31,8 @@
     "idiots": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs/excalidraw.md"
   ],
   "scripts": {
     "dev": "tsx src/cli.tsx",
@@ -46,7 +47,9 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
     "prepack": "npm run build",
-    "demo": "tsx src/cli.tsx --plain"
+    "demo": "tsx src/cli.tsx --plain",
+    "pipeline": "tsx src/drawing/excalidraw/cli.ts",
+    "audit-run": "tsx src/drawing/excalidraw/auditRun.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -62,6 +65,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@excalidraw/excalidraw": "0.18.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.2.0",
     "eslint": "^9.39.4",

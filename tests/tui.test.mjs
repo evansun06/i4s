@@ -13,7 +13,7 @@ import {
   loadSprites,
 } from '../dist/ui/sprites.js';
 import { parsePalette, palette, theme } from '../dist/ui/theme.js';
-import { activityLabel, floorAgent, roomLabel } from '../dist/ui/app.js';
+import { activityLabel, floorAgent } from '../dist/ui/app.js';
 
 async function until(predicate) {
   for (let i = 0; i < 500; i++) {
@@ -270,7 +270,6 @@ test('speaking follows paced playback, pause freezes it, and questions appear af
     assert.equal(controller.snapshot().question, undefined);
     assert.equal(activityLabel(controller.snapshot(), 'red'), 'speaking');
     assert.equal(floorAgent(controller.snapshot()), 'red');
-    assert.equal(roomLabel(controller.snapshot()), 'Discussion');
     controller.accept('/pause');
     assert.equal(floorAgent(controller.snapshot()), 'red');
     const shown = controller.snapshot().messages.at(-1).text;
@@ -737,7 +736,7 @@ test('Korg loading frames honor asset timing and loop without a rest', async () 
   assert.equal(loopingFrame(idle, elapsed + 500), idle[1]);
 });
 
-test('drawing centers Korg between two dimmed pairs and removes him when finished', async () => {
+test('drawing puts Korg in the right-hand corner beside the dimmed four and removes him when finished', async () => {
   const React = await import('react');
   const { renderToString } = await import('ink');
   const { stripVTControlCharacters } = await import('node:util');
@@ -750,36 +749,540 @@ test('drawing centers Korg between two dimmed pairs and removes him when finishe
       drawing: { status: 'running', message: 'Working' },
     };
     const sprites = loadSprites();
-    const view = (compact, columns) =>
+    const view = (size, columns) =>
       stripVTControlCharacters(
         renderToString(
           React.createElement(CharacterRow, {
             state,
             sprites,
-            compact,
+            size,
             tick: 0,
           }),
           { columns },
         ),
       );
     assert.equal(floorAgent(state), undefined);
-    for (const [compact, columns] of [
-      [false, 100],
-      [true, 60],
+    for (const [size, columns] of [
+      [14, 100],
+      [undefined, 60],
     ]) {
-      const output = view(compact, columns);
+      const output = view(size, columns);
       assert.equal((output.match(/paused/g) ?? []).length, 4);
       assert.match(output, /drawing/);
-      assert.ok(output.includes('▀') || output.includes('▄'));
-      // Compact mode vertically centers the agent labels beside Korg's sprite.
-      if (!compact) assert.match(output, /Ruby.*Lemon.*Korg.*Jade.*Bleu/);
+      // Too small for sprites: everyone, Korg included, is text only.
+      assert.equal(output.includes('▀') || output.includes('▄'), !!size);
+      assert.match(output, /Ruby.*Lemon.*Jade.*Bleu.*Korg/);
+      // Korg's 16-column box ends at the right edge of the terminal.
+      const korgLine = output.split('\n').find((line) => line.includes('Korg'));
+      assert.ok(korgLine.length - korgLine.indexOf('Korg') <= 10, korgLine);
     }
     for (const status of ['ready', 'failed']) {
       state.drawing = { status };
-      assert.doesNotMatch(view(false, 100), /Korg|drawing/);
+      assert.doesNotMatch(view(14, 100), /Korg|drawing/);
       assert.equal(floorAgent(state), 'red');
     }
   } finally {
     await controller.close();
+  }
+});
+
+/** An interactive Ink terminal of a given size, driven through stdin. */
+async function fakeTerminal(element, columns, rows) {
+  const { render } = await import('ink');
+  const { PassThrough, Writable } = await import('node:stream');
+  let screen = '';
+  const stdout = new Writable({
+    write(chunk, _encoding, done) {
+      screen += chunk.toString();
+      done();
+    },
+  });
+  Object.assign(stdout, { isTTY: true, columns, rows });
+  const stdin = new PassThrough();
+  Object.assign(stdin, {
+    isTTY: true,
+    isRaw: false,
+    setRawMode() {
+      return this;
+    },
+    ref() {},
+    unref() {},
+  });
+  const app = render(element, {
+    stdout,
+    stdin,
+    exitOnCtrlC: false,
+    patchConsole: false,
+  });
+  return { stdin, app, screen: () => screen };
+}
+
+test('/lobby and /quit leave the chat; other input stays', async () => {
+  assert.deepEqual(parseCommand('/lobby'), { kind: 'lobby' });
+  assert.equal(parseCommand('/lobby now').kind, 'error');
+  assert.ok(complete('/lo').some(({ label }) => label === '/lobby'));
+  const { controller } = fixture(() => 'PASS');
+  try {
+    assert.equal(controller.accept('/lobby'), 'lobby');
+    assert.equal(controller.accept('/quit'), 'quit');
+    assert.equal(controller.accept('/help'), false);
+  } finally {
+    await controller.close();
+  }
+});
+
+/** A key store with fake keychain, settings and environment. */
+async function memoryKeys({ env = {}, keychainWorks = true } = {}) {
+  const { createKeyStore } = await import('../dist/ui/keys.js');
+  const saved = new Map();
+  let settings = {};
+  return createKeyStore({
+    env,
+    keychain: {
+      get: async (provider) => saved.get(provider) ?? null,
+      set: async (provider, key) => {
+        if (!keychainWorks) return false;
+        saved.set(provider, key);
+        return true;
+      },
+      remove: async (provider) => saved.delete(provider),
+    },
+    settings: {
+      load: async () => settings,
+      save: async (next) => {
+        settings = next;
+      },
+    },
+  });
+}
+
+test('keys come from the environment or are saved; the last one chosen is used', async () => {
+  const keys = await memoryKeys({ env: { GEMINI_API_KEY: 'AIza-env-1234' } });
+  assert.deepEqual(
+    (await keys.list()).map((key) => [key.provider, key.source]),
+    [['gemini', 'env']],
+  );
+  assert.equal((await keys.active()).provider, 'gemini');
+  const added = await keys.add('anthropic', 'sk-ant-test-5678');
+  assert.equal(added.source, 'keychain');
+  assert.equal((await keys.active()).provider, 'anthropic');
+  await keys.use('gemini');
+  assert.equal((await keys.active()).provider, 'gemini');
+  await keys.remove('anthropic');
+  assert.deepEqual(
+    (await keys.list()).map((key) => key.provider),
+    ['gemini'],
+  );
+  // Without a keychain, a key still works until the app quits.
+  const session = await memoryKeys({ keychainWorks: false });
+  assert.equal((await session.add('openai', 'sk-test-9999')).source, 'session');
+  assert.equal((await session.active()).apiKey, 'sk-test-9999');
+});
+
+function savedSession(title, messages) {
+  return {
+    version: 1,
+    id: title,
+    title,
+    createdAt: '2026-10-18T09:00:00.000Z',
+    updatedAt: '2026-10-18T09:54:00.000Z',
+    discussion: {
+      log: Array.from({ length: messages }, () => ({})),
+      summary: '',
+      foldedUpTo: 0,
+    },
+  };
+}
+
+test('the lobby shows the title, the cast, and new or saved discussions', async () => {
+  const React = await import('react');
+  const { stripVTControlCharacters } = await import('node:util');
+  const { Lobby, TITLE_WIDTH } = await import('../dist/ui/lobby.js');
+  const lobby = (sessions) =>
+    React.createElement(Lobby, {
+      sessions,
+      sprites: loadSprites(),
+      keyLabel: 'Gemini · fake-model',
+      onChoose: () => {},
+      onKeys: () => {},
+      onQuit: () => {},
+    });
+  const wide = await fakeTerminal(
+    lobby([savedSession('Open a coffee shop', 3)]),
+    100,
+    40,
+  );
+  try {
+    await until(() => /Open a coffee shop/.test(wide.screen()));
+    const output = stripVTControlCharacters(wide.screen());
+    assert.ok(/[█▀▄]{4}/.test(output), 'pixel title');
+    assert.match(output, /Four perspectives\./);
+    assert.doesNotMatch(output, /Four AI advisors/);
+    assert.match(output, /Ruby.*Lemon.*Jade.*Bleu/);
+    assert.match(output, /› \+ New discussion/);
+    assert.match(output, /Open a coffee shop.*3 messages/);
+    assert.match(output, /Ctrl\+K keys.*Gemini · fake-model/);
+  } finally {
+    wide.app.unmount();
+  }
+  // Too narrow for the block letters: a plain title instead.
+  const narrow = await fakeTerminal(lobby([]), TITLE_WIDTH, 30);
+  try {
+    await until(() => /Start your first discussion/.test(narrow.screen()));
+    const output = stripVTControlCharacters(narrow.screen());
+    assert.match(output, /THE IDIOTS/);
+    assert.ok(!output.includes('█████'));
+  } finally {
+    narrow.app.unmount();
+  }
+});
+
+/** The full-screen Shell with fake sessions and chats. */
+async function shell(keys) {
+  const React = await import('react');
+  const { Shell } = await import('../dist/ui/shell.js');
+  const loads = [];
+  const opened = [];
+  const terminal = await fakeTerminal(
+    React.createElement(Shell, {
+      keys,
+      loadSessions: async () => {
+        loads.push(Date.now());
+        return [];
+      },
+      openChat: (choice, key) => {
+        const { controller } = fixture(() => 'PASS');
+        opened.push({ choice, key, controller });
+        return controller;
+      },
+      labelFor: (key) => `${key.provider} · fake-model`,
+      sprites: loadSprites(),
+    }),
+    100,
+    40,
+  );
+  return {
+    ...terminal,
+    loads,
+    opened,
+    since: (mark) => terminal.screen().slice(mark),
+    mark: () => terminal.screen().length,
+    async close() {
+      terminal.app.unmount();
+      for (const { controller } of opened) await controller.close();
+    },
+  };
+}
+
+test('with no keys, the first screen asks for one, then opens the lobby', async () => {
+  const keys = await memoryKeys();
+  const app = await shell(keys);
+  try {
+    await until(() =>
+      /Paste in your first key to get started/.test(app.since(0)),
+    );
+    let mark = app.mark();
+    app.stdin.write('AIzaSyFakeKeyForTests');
+    await until(() => /•+ 21 characters/.test(app.since(mark)));
+    assert.doesNotMatch(app.screen(), /SyFakeKey/, 'the key stays hidden');
+    mark = app.mark();
+    app.stdin.write('\r');
+    await until(() => /New discussion/.test(app.since(mark)));
+    assert.match(app.since(mark), /Gemini key saved to your system keychain/);
+    assert.equal((await keys.active()).provider, 'gemini');
+  } finally {
+    await app.close();
+  }
+});
+
+test('Ctrl+K opens the keys, Esc returns to the lobby, and chats use the chosen key', async () => {
+  const keys = await memoryKeys();
+  await keys.add('gemini', 'AIza-test-1111');
+  await keys.add('anthropic', 'sk-ant-test-2222');
+  await keys.use('gemini');
+  const app = await shell(keys);
+  try {
+    await until(() => /New discussion/.test(app.since(0)));
+    let mark = app.mark();
+    app.stdin.write('\u000b'); // Ctrl+K
+    await until(() => /API keys/.test(app.since(mark)));
+    assert.match(app.since(mark), /Gemini · key ending 1111.*in use/);
+    assert.match(app.since(mark), /Claude · key ending 2222/);
+    mark = app.mark();
+    app.stdin.write('\u001b'); // Esc
+    await until(() => /New discussion/.test(app.since(mark)));
+    // Choose the Claude key, then open a chat with it.
+    mark = app.mark();
+    app.stdin.write('\u000b');
+    await until(() => /API keys/.test(app.since(mark)));
+    app.stdin.write('\u001b[B'); // Down
+    await delay(50);
+    mark = app.mark();
+    app.stdin.write('\r');
+    await until(() => /New chats use Claude/.test(app.since(mark)));
+    await delay(50);
+    app.stdin.write('\r');
+    await until(() => app.opened.length === 1);
+    assert.equal(app.opened[0].key.provider, 'anthropic');
+  } finally {
+    await app.close();
+  }
+});
+
+test('the lobby opens a chat, and /lobby saves it and returns with the list refreshed', async () => {
+  const keys = await memoryKeys({ env: { GEMINI_API_KEY: 'AIza-env-1234' } });
+  const app = await shell(keys);
+  try {
+    await until(() => /New discussion/.test(app.since(0)) && app.loads.length);
+    let mark = app.mark();
+    app.stdin.write('\r');
+    await until(
+      () =>
+        app.opened.length === 1 && /Message the idiots/.test(app.since(mark)),
+    );
+    assert.equal(app.opened[0].choice, undefined);
+    app.stdin.write('/lobby');
+    await delay(20);
+    mark = app.mark();
+    const loads = app.loads.length;
+    app.stdin.write('\r');
+    await until(
+      () => app.loads.length > loads && /New discussion/.test(app.since(mark)),
+    );
+    assert.equal(app.opened[0].controller.snapshot().closing, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('/about shows every advisor, or only the ones named', async () => {
+  assert.deepEqual(parseCommand('/about'), { kind: 'about', agents: [] });
+  assert.deepEqual(parseCommand('/about @ruby'), {
+    kind: 'about',
+    agents: ['red'],
+  });
+  assert.equal(parseCommand('/about @nobody').kind, 'error');
+  assert.ok(complete('/about @r').some(({ label }) => label === '@ruby'));
+  const { controller } = fixture(() => 'PASS');
+  try {
+    controller.accept('/about');
+    let text = controller.snapshot().messages.at(-1).text;
+    for (const name of ['Ruby', 'Lemon', 'Jade', 'Bleu'])
+      assert.ok(text.includes(`${name} (`), name);
+    assert.match(text, /Action, priorities, and results/);
+    controller.accept('/about @ruby');
+    text = controller.snapshot().messages.at(-1).text;
+    assert.match(text, /^Ruby \(red\)/);
+    assert.doesNotMatch(text, /Lemon|Jade|Bleu/);
+  } finally {
+    await controller.close();
+  }
+});
+
+test('a light band sweeps left to right through the text, keeping bold runs', async () => {
+  const { boldRuns, lightRuns, shimmerBand } =
+    await import('../dist/ui/message-text.js');
+  const runs = boldRuns('Ship **now**, not later.');
+  // Splitting never changes the text or its bold styling.
+  for (const [from, to] of [
+    [-6, 0],
+    [3, 9],
+    [20, 26],
+    [30, 36],
+  ]) {
+    const lit = lightRuns(runs, from, to);
+    assert.equal(lit.map((run) => run.text).join(''), 'Ship now, not later.');
+    assert.equal(
+      lit
+        .filter((run) => run.bold)
+        .map((run) => run.text)
+        .join(''),
+      'now',
+    );
+  }
+  assert.deepEqual(
+    lightRuns(runs, 3, 9).filter((run) => run.lit),
+    [
+      { text: 'p ', bold: false, lit: true },
+      { text: 'now', bold: true, lit: true },
+      { text: ',', bold: false, lit: true },
+    ],
+  );
+  // The band enters from the left, moves right over time, and wraps around.
+  const positions = [0, 600, 1200, 1800].map((ms) => shimmerBand(20, ms)[1]);
+  assert.deepEqual(
+    positions,
+    [...positions].sort((a, b) => a - b),
+  );
+  assert.deepEqual(shimmerBand(20, 0), [-6, 0]);
+  assert.deepEqual(shimmerBand(20, 2400), shimmerBand(20, 0));
+  assert.ok(shimmerBand(20, 2399)[0] >= 19);
+});
+
+test('while drawing, Korg speaks the current step in the chat with a silver orb', async () => {
+  const React = await import('react');
+  const { stripVTControlCharacters } = await import('node:util');
+  const { App } = await import('../dist/ui/app.js');
+  const { controller } = fixture(() => 'PASS');
+  const listeners = new Set();
+  let state = {
+    ...controller.snapshot(),
+    drawing: {
+      status: 'running',
+      message: 'Step 2: building the implementation map…',
+    },
+  };
+  const terminal = await fakeTerminal(
+    React.createElement(App, {
+      controller: {
+        ...controller,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        snapshot: () => state,
+      },
+      sprites: loadSprites(),
+      providerLabel: 'Test · fake',
+    }),
+    100,
+    40,
+  );
+  const since = (mark) =>
+    stripVTControlCharacters(terminal.screen().slice(mark));
+  try {
+    await until(() => /● Korg · drawing/.test(since(0)));
+    assert.match(since(0), /Step 2: building the implementation map…/);
+    // The step shows once, in Korg's entry, not again in the status line.
+    assert.match(since(0), /Drawing maps · All agents paused/);
+    assert.doesNotMatch(since(0), /building the implementation map… ·/);
+    const mark = terminal.screen().length;
+    state = { ...state, drawing: { status: 'failed', message: 'x' } };
+    for (const listener of listeners) listener();
+    await until(() => /calls ·/.test(since(mark)));
+    assert.doesNotMatch(since(mark), /Korg · drawing/);
+  } finally {
+    terminal.app.unmount();
+    await controller.close();
+  }
+});
+
+test('a short chat sits at the bottom; a long one follows the end or scrolls', async () => {
+  const { chatPosition } = await import('../dist/ui/app.js');
+  // 6 lines in a 20-line area: 14 blank lines above, pushed up as it grows.
+  assert.deepEqual(chatPosition(6, 20), { bottom: 0, offset: 0, top: 14 });
+  assert.deepEqual(chatPosition(12, 20), { bottom: 0, offset: 0, top: 8 });
+  // 50 lines: the last 20 show, or an earlier stretch when scrolled.
+  assert.deepEqual(chatPosition(50, 20), { bottom: 30, offset: 30, top: -30 });
+  assert.deepEqual(chatPosition(50, 20, 10), {
+    bottom: 30,
+    offset: 10,
+    top: -10,
+  });
+});
+
+test('lists stop at their first and last items instead of wrapping', async () => {
+  const { step } = await import('../dist/ui/editor.js');
+  assert.equal(step(0, -1, 5), 0);
+  assert.equal(step(4, 1, 5), 4);
+  assert.equal(step(2, 1, 5), 3);
+  assert.equal(step(0, 1, 1), 0);
+});
+
+test('the title is drawn in small square pixels with half blocks', async () => {
+  const { titlePixels, titleRows, TITLE_WIDTH } =
+    await import('../dist/ui/lobby.js');
+  const pixels = titlePixels();
+  assert.equal(pixels.length, 5);
+  assert.ok(pixels.every((row) => row.length === TITLE_WIDTH));
+  const rows = titleRows();
+  assert.equal(rows.length, 3);
+  assert.ok(TITLE_WIDTH < 60);
+  assert.ok(rows.every((row) => row.length === TITLE_WIDTH));
+  assert.ok(rows.every((row) => /^[█▀▄ ]+$/.test(row)));
+});
+
+test('the highlight is a lighter shade of the text it passes over', async () => {
+  const { lighten } = await import('../dist/ui/theme.js');
+  assert.equal(lighten('#000000'), '#808080');
+  assert.equal(lighten('#ff0000'), '#ff8080');
+  assert.equal(lighten('#bdbdbd', 0), '#bdbdbd');
+  const red = theme.agents.red.light;
+  const lighter = lighten(red);
+  for (const at of [1, 3, 5])
+    assert.ok(
+      parseInt(lighter.slice(at, at + 2), 16) >=
+        parseInt(red.slice(at, at + 2), 16),
+    );
+});
+
+test('Esc interrupts: a reply cut mid-stream keeps only what was shown', async () => {
+  const streaming = Promise.withResolvers();
+  const provider = {
+    async *generate(request) {
+      const agent = panel.find(
+        (candidate) => candidate.systemPrompt === request.system,
+      )?.id;
+      if (request.kind !== 'draft' || agent !== 'red') {
+        yield 'PASS';
+        return;
+      }
+      yield 'SPEAK\nShown before Esc. Never shown after it.';
+      streaming.resolve();
+      await new Promise((_, fail) =>
+        request.signal.addEventListener('abort', () => fail(new Error('x')), {
+          once: true,
+        }),
+      );
+    },
+  };
+  const engine = new Orchestrator({ agents: panel, provider, callLimit: 20 });
+  // Reading speed slow enough that the reply is only partly on screen.
+  const controller = new ChatController(engine, { wordsPerMinute: 120 });
+  try {
+    controller.accept('Help me decide.');
+    await streaming.promise;
+    await until(
+      () => (controller.snapshot().messages.at(-1)?.text.length ?? 0) > 3,
+    );
+    assert.equal(controller.interrupt(), true);
+    await until(() => controller.snapshot().room.mode === 'awaiting-user');
+    await until(() => controller.snapshot().messages.at(-1)?.complete);
+    const reply = controller.snapshot().messages.at(-1);
+    assert.equal(reply.speaker, 'red');
+    assert.equal(reply.failed, true, 'shown as interrupted');
+    assert.ok('Shown before Esc. Never shown after it.'.startsWith(reply.text));
+    assert.ok(!reply.text.includes('Never shown after it.'));
+    assert.equal(engine.bus.log.filter((e) => e.agent === 'red').length, 0);
+  } finally {
+    await controller.close();
+  }
+});
+
+test('the speaker orb pulses by size in one color, each glyph one column wide', async () => {
+  const { ORB_SIZES } = await import('../dist/ui/app.js');
+  const { default: stringWidth } = await import('string-width');
+  assert.equal(ORB_SIZES[0], '●', 'a still orb is full size');
+  assert.ok(new Set(ORB_SIZES).size > 1, 'it shrinks and grows');
+  for (const glyph of ORB_SIZES) assert.equal(stringWidth(glyph), 1);
+});
+
+test('characters shrink with the terminal, then become text below the minimum', async () => {
+  const { spriteSize, MAX_SPRITE, MIN_SPRITE } =
+    await import('../dist/ui/app.js');
+  const { scaleFrame } = await import('../dist/ui/sprites.js');
+  assert.ok(MAX_SPRITE < 16, 'smaller than the hand-drawn size');
+  assert.equal(spriteSize(100, 50), MAX_SPRITE);
+  assert.equal(spriteSize(100, 28), 12);
+  assert.equal(spriteSize(100, 23), MIN_SPRITE);
+  assert.equal(spriteSize(100, 20), undefined, 'text only');
+  assert.equal(spriteSize(60, 50), undefined, 'too narrow');
+  // Each size stays square in pixels: size columns by size/2 rows.
+  const frame = loadSprites().red.idle[0];
+  for (const size of [MAX_SPRITE, 12, MIN_SPRITE]) {
+    const scaled = scaleFrame(frame, size);
+    assert.equal(scaled.rows.length, size / 2);
+    assert.ok(scaled.rows.every((row) => row.length === size));
+    assert.equal(scaleFrame(frame, size), scaled, 'cached');
   }
 });

@@ -4,24 +4,24 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { buildExcalidrawScene } from '../dist/rendering/buildExcalidrawScene.js';
-import { defaultPresentation } from '../dist/rendering/presentation.js';
+import { buildExcalidrawScene } from '../dist/drawing/excalidraw/rendering/buildExcalidrawScene.js';
+import { defaultPresentation } from '../dist/drawing/excalidraw/rendering/presentation.js';
 import {
   exportOnlineEdit,
   onlineEditPage,
   onlineEditUrl,
-} from '../dist/rendering/onlineEdit.js';
+} from '../dist/drawing/excalidraw/rendering/onlineEdit.js';
 
 async function fixture() {
   const knowledge = JSON.parse(
     await readFile(
-      new URL('./fixtures/step1-knowledge.json', import.meta.url),
+      new URL('./pipeline/fixtures/step1-knowledge.json', import.meta.url),
       'utf8',
     ),
   );
   const planning = JSON.parse(
     await readFile(
-      new URL('./fixtures/step2-planning.json', import.meta.url),
+      new URL('./pipeline/fixtures/step2-planning.json', import.meta.url),
       'utf8',
     ),
   );

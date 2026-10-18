@@ -260,3 +260,61 @@ export class FloorAnimation {
     return this.sprites.idle[this.#idle.frame(now)]!;
   }
 }
+
+const scaled = new WeakMap<SpriteFrame, Map<number, SpriteFrame>>();
+
+/**
+ * The frame redrawn at `size` pixels square (the art is 16), sampling the
+ * nearest pixel so it stays crisp. Results are cached per frame and size.
+ */
+export function scaleFrame(frame: SpriteFrame, size: number): SpriteFrame {
+  const source = frame.rows.length * 2;
+  if (size === source) return frame;
+  let sizes = scaled.get(frame);
+  if (!sizes) scaled.set(frame, (sizes = new Map<number, SpriteFrame>()));
+  const cached = sizes.get(size);
+  if (cached) return cached;
+  // Unpack the half blocks into a pixel grid of colors.
+  const pixels = frame.rows.flatMap((row) => {
+    const top: (string | undefined)[] = [];
+    const bottom: (string | undefined)[] = [];
+    for (const cell of row) {
+      top.push(cell.glyph === '▀' ? cell.foreground : undefined);
+      bottom.push(
+        cell.glyph === '▀'
+          ? cell.background
+          : cell.glyph === '▄'
+            ? cell.foreground
+            : undefined,
+      );
+    }
+    return [top, bottom];
+  });
+  const sample = (x: number, y: number) =>
+    pixels[Math.floor(((y + 0.5) * source) / size)]?.[
+      Math.floor(((x + 0.5) * source) / size)
+    ];
+  const rows: PixelCell[][] = [];
+  for (let y = 0; y < size; y += 2) {
+    const row: PixelCell[] = [];
+    for (let x = 0; x < size; x++) {
+      const top = sample(x, y);
+      const bottom = y + 1 < size ? sample(x, y + 1) : undefined;
+      row.push(
+        top
+          ? {
+              glyph: '▀',
+              foreground: top,
+              ...(bottom && { background: bottom }),
+            }
+          : bottom
+            ? { glyph: '▄', foreground: bottom }
+            : { glyph: ' ' },
+      );
+    }
+    rows.push(row);
+  }
+  const result = { rows, duration: frame.duration };
+  sizes.set(size, result);
+  return result;
+}

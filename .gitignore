@@ -8,6 +8,7 @@ coverage/
 .DS_Store
 *.log
 i4s-exports/
+/runs/
 .vscode/*
 .idle-preview/
 /local-sessions

@@ -8,8 +8,11 @@ import {
   FinalOrchestrator,
   graphPrompt,
   extractionPrompt,
-} from '../dist/finalOrchestrator.js';
-import { finalResultSchema, validateSchema } from '../dist/contracts.js';
+} from '../dist/drawing/excalidraw/finalOrchestrator.js';
+import {
+  finalResultSchema,
+  validateSchema,
+} from '../dist/drawing/excalidraw/contracts.js';
 import {
   specification,
   seedConversation,
@@ -18,7 +21,7 @@ import {
   inputFrom,
   baseObject,
   graphFor,
-} from './helpers.mjs';
+} from './pipeline/helpers.mjs';
 
 test('prompts preserve adopted work and request ambitious inference only in implementation', () => {
   const data = bookSwap();
@@ -537,7 +540,7 @@ test('standalone prepare creates unique run folders and references the original 
   for (let i = 0; i < 2; i++) {
     const result = spawnSync(
       process.execPath,
-      ['dist/cli.js', '--prepare', '--out', out],
+      ['dist/drawing/excalidraw/cli.js', '--prepare', '--out', out],
       { encoding: 'utf8' },
     );
     assert.equal(result.status, 0, result.stderr);
@@ -548,17 +551,25 @@ test('standalone prepare creates unique run folders and references the original 
   const metadata = JSON.parse(
     await readFile(join(out, runs[0], 'run.json'), 'utf8'),
   );
-  assert.ok(metadata.specificationPath.endsWith('/docs/excalidraw.md'));
+  assert.ok(
+    metadata.specificationPath
+      .replaceAll('\\', '/')
+      .endsWith('/docs/excalidraw.md'),
+  );
   assert.equal(metadata.mode, 'prepare');
   assert.ok((await readdir(join(out, runs[0]))).includes('step1.prompt.txt'));
 });
 
 test('missing live credentials fails clearly, with no seeded-response substitution', async () => {
   const out = await mkdtemp(join(tmpdir(), 'i4s-no-key-'));
-  const result = spawnSync(process.execPath, ['dist/cli.js', '--out', out], {
-    encoding: 'utf8',
-    env: { ...process.env, OPENAI_API_KEY: '' },
-  });
+  const result = spawnSync(
+    process.execPath,
+    ['dist/drawing/excalidraw/cli.js', '--out', out],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, OPENAI_API_KEY: '' },
+    },
+  );
   assert.equal(result.status, 1);
   assert.match(result.stderr, /OPENAI_API_KEY/);
   const [run] = await readdir(out),

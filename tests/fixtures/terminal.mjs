@@ -61,7 +61,8 @@ const controller = new ChatController(engine, {
   draw: createDrawingPipeline({
     sessionFile,
     outputDirectory: join(temporary, 'runs'),
-    pipelineDirectory,
+    entry: join(pipelineDirectory, 'src/cli.ts'),
+    openAiKey: async () => 'sk-test-fake',
   }),
 });
 try {

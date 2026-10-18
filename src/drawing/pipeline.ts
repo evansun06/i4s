@@ -12,27 +12,41 @@ const labels: Record<string, string> = {
   presentation: 'Step 3: arranging the maps and exporting Excalidraw…',
 };
 
-/** Keep the pipeline's runtime/dependencies separate from the discussion engine. */
+/**
+ * Runs the drawing pipeline (./excalidraw/) in a child process, so a crash or
+ * cancellation there never takes the room down with it.
+ */
 export function createDrawingPipeline(options: {
   sessionFile: string;
   outputDirectory: string;
-  pipelineDirectory?: string;
+  /** The OpenAI key for this session's drawing calls. */
+  openAiKey: () => Promise<string | undefined>;
+  /** The pipeline script; tests substitute a stand-in. */
+  entry?: string;
 }): DrawPipeline {
-  const pipeline =
-    options.pipelineDirectory ??
-    fileURLToPath(new URL('../../excalidraw-pipeline/', import.meta.url));
+  // Compiled builds run cli.js directly; from source (npm run dev), cli.ts
+  // runs through tsx like the rest of the app.
+  const fromSource = import.meta.url.endsWith('.ts');
+  const entry =
+    options.entry ??
+    fileURLToPath(
+      new URL(`./excalidraw/cli.${fromSource ? 'ts' : 'js'}`, import.meta.url),
+    );
   const outputDirectory = resolve(options.outputDirectory);
   const links = createEditorLinks();
   const draw: DrawPipeline = async ({ signal, onProgress, onCall }) => {
     signal.throwIfAborted();
-    const entry = join(pipeline, 'src/cli.ts');
     try {
       await access(entry);
     } catch {
-      throw new Error(
-        'Drawing pipeline is not installed. Use this repository checkout and run npm ci in excalidraw-pipeline.',
-      );
+      throw new Error('Drawing pipeline is missing from this build.');
     }
+    const apiKey = (await options.openAiKey())?.trim();
+    signal.throwIfAborted();
+    if (!apiKey)
+      throw new Error(
+        'Drawing needs an OpenAI key. Start a session with a ChatGPT key, or set OPENAI_API_KEY.',
+      );
     let directory: string | undefined;
     let pending = '';
     let diagnostics = '';
@@ -72,9 +86,9 @@ export function createDrawingPipeline(options: {
       const child = spawn(
         process.execPath,
         [
-          '--env-file-if-exists=.env',
-          '--import',
-          import.meta.resolve('tsx'),
+          ...(entry.endsWith('.ts')
+            ? ['--import', import.meta.resolve('tsx')]
+            : []),
           entry,
           '--session-file',
           resolve(options.sessionFile),
@@ -83,7 +97,12 @@ export function createDrawingPipeline(options: {
           '--progress-json',
           '--reuse-extraction',
         ],
-        { cwd: pipeline, stdio: ['ignore', 'ignore', 'pipe'], signal },
+        {
+          stdio: ['ignore', 'ignore', 'pipe'],
+          signal,
+          // Only through the child's environment: never written to disk.
+          env: { ...process.env, OPENAI_API_KEY: apiKey },
+        },
       );
       let error: Error | undefined;
       child.on('error', (value) => {
@@ -126,7 +145,7 @@ export function createDrawingPipeline(options: {
         if (code !== 0 || !directory) {
           fail(
             new Error(
-              `Drawing failed.${directory ? ` Inspect ${directory}.` : ''}\n${diagnostics.trim() || 'Check pipeline dependencies and OPENAI_API_KEY in excalidraw-pipeline/.env.'}`,
+              `Drawing failed.${directory ? ` Inspect ${directory}.` : ''}\n${diagnostics.trim() || 'The drawing pipeline exited without a report.'}`,
             ),
           );
           return;

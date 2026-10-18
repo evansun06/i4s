@@ -7,9 +7,9 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
-import { buildExcalidrawScene } from '../dist/rendering/buildExcalidrawScene.js';
-import { exportExcalidraw } from '../dist/rendering/exportExcalidraw.js';
-import { defaultPresentation } from '../dist/rendering/presentation.js';
+import { buildExcalidrawScene } from '../dist/drawing/excalidraw/rendering/buildExcalidrawScene.js';
+import { exportExcalidraw } from '../dist/drawing/excalidraw/rendering/exportExcalidraw.js';
+import { defaultPresentation } from '../dist/drawing/excalidraw/rendering/presentation.js';
 
 const exec = promisify(execFile);
 test(
@@ -30,13 +30,13 @@ test(
     const directory = await mkdtemp(join(tmpdir(), 'i4s-excalidraw-import-'));
     const knowledge = JSON.parse(
       await readFile(
-        new URL('./fixtures/step1-knowledge.json', import.meta.url),
+        new URL('./pipeline/fixtures/step1-knowledge.json', import.meta.url),
         'utf8',
       ),
     );
     const planning = JSON.parse(
       await readFile(
-        new URL('./fixtures/step2-planning.json', import.meta.url),
+        new URL('./pipeline/fixtures/step2-planning.json', import.meta.url),
         'utf8',
       ),
     );
@@ -66,7 +66,7 @@ test(
     await build({
       entryPoints: [
         fileURLToPath(
-          new URL('./excalidraw-browser-entry.mjs', import.meta.url),
+          new URL('./pipeline/excalidraw-browser-entry.mjs', import.meta.url),
         ),
       ],
       outfile: join(directory, 'smoke.js'),

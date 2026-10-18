@@ -103,6 +103,8 @@ export class Orchestrator {
   readonly #agentStates = new Map<AgentId, AgentState>();
   readonly #agentListeners = new Set<AgentListener>();
   readonly #shutdown = new AbortController();
+  /** Aborted by interrupt(): cancels the drafts then in progress. */
+  #cut = new AbortController();
   #disposed = false;
   /** Agents with a contribution in progress; they can span rounds. */
   readonly #active = new Set<AgentId>();
@@ -395,6 +397,21 @@ export class Orchestrator {
     return true;
   }
 
+  /**
+   * The user cut in: drafting stops now, no one else takes the floor, and
+   * the round ends. A reply being streamed is dropped unsaid; finished drafts
+   * waiting their turn are kept, as with a raised hand. Agents cut off redraft
+   * after the user's next message. Returns false if no round is running.
+   */
+  interrupt(): boolean {
+    if (this.#disposed || this.#mode !== 'running') return false;
+    this.#handRaised = true;
+    this.#cut.abort();
+    this.#cut = new AbortController();
+    this.#changed();
+    return true;
+  }
+
   pause(options: { freezeCurrent?: boolean } = {}): void {
     // Ordinary pause lets the current speaker finish. A drawing snapshot must
     // hold even that speaker until explicit resume, including an already-paused room.
@@ -519,6 +536,7 @@ export class Orchestrator {
     }
     this.#setAgent(agent.id, deep ? 'deliberating' : 'thinking');
     await this.#waitRunning();
+    const cut = this.#cut.signal;
     const heardUpTo = this.bus.log.length;
     this.#readThrough.set(agent.id, heardUpTo);
     const followup = this.#followups.get(agent.id);
@@ -526,32 +544,37 @@ export class Orchestrator {
     let live = false;
     let reserved = false;
     try {
-      for await (const chunk of this.#generate(agent.name, {
-        kind: 'draft',
-        system: agent.systemPrompt,
-        prompt:
-          followup && !deep
-            ? followupPrompt(
-                this.#context(),
-                followup.speaker,
-                this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
-                this.#angry,
-              )
-            : draftPrompt(this.#context(), {
-                forced,
-                angry: this.#angry,
-                temperature:
+      for await (const chunk of this.#generate(
+        agent.name,
+        {
+          kind: 'draft',
+          system: agent.systemPrompt,
+          prompt:
+            followup && !deep
+              ? followupPrompt(
+                  this.#context(),
+                  followup.speaker,
                   this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
-                addressed: this.#mentioned.map(
-                  (id) =>
-                    this.#agents.find((other) => other.id === id)?.name ?? id,
-                ),
-                allowDeep: !deep && this.#deepThisRound < MAX_DEEP_PER_ROUND,
-                ...(deep && { deepAnnouncement: deep.announcement }),
-              }),
-        maxOutputTokens: deep ? DEEP_TOKENS : REPLY_TOKENS,
-        ...(deep && { effort: 'high' as const }),
-      })) {
+                  this.#angry,
+                )
+              : draftPrompt(this.#context(), {
+                  forced,
+                  angry: this.#angry,
+                  temperature:
+                    this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
+                  addressed: this.#mentioned.map(
+                    (id) =>
+                      this.#agents.find((other) => other.id === id)?.name ?? id,
+                  ),
+                  allowDeep: !deep && this.#deepThisRound < MAX_DEEP_PER_ROUND,
+                  ...(deep && { deepAnnouncement: deep.announcement }),
+                }),
+          maxOutputTokens: deep ? DEEP_TOKENS : REPLY_TOKENS,
+          ...(deep && { effort: 'high' as const }),
+        },
+        undefined,
+        cut,
+      )) {
         raw += chunk;
         const reply = parseReply(raw, false);
         if (!reply) continue;
@@ -579,8 +602,13 @@ export class Orchestrator {
         if (live) this.#showSpeech(agent.id, reply.body);
       }
     } catch (error) {
-      this.#notice = `${agent.name} could not respond: ${errorMessage(error)}`;
       if (reserved) this.#releaseFloor();
+      // Interrupted: say nothing, and draft afresh after the user speaks.
+      if (cut.aborted && !this.#shutdown.signal.aborted) {
+        this.#endTurn(agent.id, 'withdrew');
+        return 'stale';
+      }
+      this.#notice = `${agent.name} could not respond: ${errorMessage(error)}`;
       this.#endTurn(agent.id, 'failed');
       return 'done';
     }
@@ -1072,7 +1100,11 @@ export class Orchestrator {
     who: string,
     request: ModelRequest | (() => ModelRequest),
     current: () => boolean = () => true,
+    cut?: AbortSignal,
   ): AsyncIterable<string> {
+    const signal = cut
+      ? AbortSignal.any([this.#shutdown.signal, cut])
+      : this.#shutdown.signal;
     for (let attempt = 1; ; attempt += 1) {
       let started = false;
       try {
@@ -1095,7 +1127,7 @@ export class Orchestrator {
             this.#shutdown.signal.throwIfAborted();
             continue;
           }
-          this.#shutdown.signal.throwIfAborted();
+          signal.throwIfAborted();
           if (
             attempt > 1 ||
             this.#callsUsed + this.#reservedCalls < this.#callLimit
@@ -1110,9 +1142,9 @@ export class Orchestrator {
         }
         for await (const chunk of this.#provider.generate({
           ...(typeof request === 'function' ? request() : request),
-          signal: this.#shutdown.signal,
+          signal,
         })) {
-          this.#shutdown.signal.throwIfAborted();
+          signal.throwIfAborted();
           await this.#until(
             () => this.#mode !== 'paused' || !this.#freezePausedOutput,
           );
