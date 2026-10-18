@@ -73,91 +73,112 @@ export function decodePng(png: Buffer): {
   return { width, height, pixels };
 }
 
+function loadSprite(base: URL): SpriteAnimations {
+  const sheet = decodePng(readFileSync(new URL(`${base.href}.png`)));
+  const meta = JSON.parse(
+    readFileSync(new URL(`${base.href}.json`), 'utf8'),
+  ) as {
+    frames: {
+      frame: { x: number; y: number; w: number; h: number };
+      duration: number;
+    }[];
+    meta: { frameTags: { name: string; from: number; to: number }[] };
+  };
+  const sequence = (name: string): readonly SpriteFrame[] => {
+    const tag = meta.meta.frameTags.find(
+      (tag) => tag.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (!tag && name !== 'idle') return [];
+    if (
+      !tag ||
+      !Number.isInteger(tag.from) ||
+      !Number.isInteger(tag.to) ||
+      tag.from < 0 ||
+      tag.to < tag.from ||
+      tag.to >= meta.frames.length
+    ) {
+      throw new Error(`Invalid ${name} frames for ${base.pathname}.`);
+    }
+    return meta.frames
+      .slice(tag.from, tag.to + 1)
+      .map(({ frame, duration }) => {
+        if (
+          frame.x < 0 ||
+          frame.y < 0 ||
+          frame.w !== 16 ||
+          frame.h !== 16 ||
+          frame.x + frame.w > sheet.width ||
+          frame.y + frame.h > sheet.height ||
+          duration <= 0
+        ) {
+          throw new Error(`Invalid sprite bounds for ${base.pathname}.`);
+        }
+        const pixel = (x: number, y: number) => {
+          const at = ((frame.y + y) * sheet.width + frame.x + x) * 4;
+          return sheet.pixels[at + 3]
+            ? `#${sheet.pixels.subarray(at, at + 3).toString('hex')}`
+            : undefined;
+        };
+        const rows: PixelCell[][] = [];
+        for (let y = 0; y < frame.h; y += 2) {
+          const row: PixelCell[] = [];
+          for (let x = 0; x < frame.w; x++) {
+            const top = pixel(x, y),
+              bottom = pixel(x, y + 1);
+            row.push(
+              top
+                ? {
+                    glyph: '▀',
+                    foreground: top,
+                    ...(bottom && { background: bottom }),
+                  }
+                : bottom
+                  ? { glyph: '▄', foreground: bottom }
+                  : { glyph: ' ' },
+            );
+          }
+          rows.push(row);
+        }
+        return { rows, duration };
+      });
+  };
+  return {
+    idle: sequence('idle'),
+    toSpeak: sequence('toSpeak'),
+    toNotSpeak: sequence('toNotSpeak'),
+  };
+}
+
 export function loadSprites(): Record<AgentId, SpriteAnimations> {
   return Object.fromEntries(
-    agentIds.map((id) => {
-      const base = new URL(
-        `../assets/source/agents/${identities[id].asset}`,
-        import.meta.url,
-      );
-      const sheet = decodePng(readFileSync(new URL(`${base.href}.png`)));
-      const meta = JSON.parse(
-        readFileSync(new URL(`${base.href}.json`), 'utf8'),
-      ) as {
-        frames: {
-          frame: { x: number; y: number; w: number; h: number };
-          duration: number;
-        }[];
-        meta: { frameTags: { name: string; from: number; to: number }[] };
-      };
-      const sequence = (name: string): readonly SpriteFrame[] => {
-        const tag = meta.meta.frameTags.find(
-          (tag) => tag.name.toLowerCase() === name.toLowerCase(),
-        );
-        if (!tag && name !== 'idle') return [];
-        if (
-          !tag ||
-          !Number.isInteger(tag.from) ||
-          !Number.isInteger(tag.to) ||
-          tag.from < 0 ||
-          tag.to < tag.from ||
-          tag.to >= meta.frames.length
-        ) {
-          throw new Error(`Invalid ${name} frames for ${id}.`);
-        }
-        return meta.frames
-          .slice(tag.from, tag.to + 1)
-          .map(({ frame, duration }) => {
-            if (
-              frame.x < 0 ||
-              frame.y < 0 ||
-              frame.w !== 16 ||
-              frame.h !== 16 ||
-              frame.x + frame.w > sheet.width ||
-              frame.y + frame.h > sheet.height ||
-              duration <= 0
-            ) {
-              throw new Error(`Invalid sprite bounds for ${id}.`);
-            }
-            const pixel = (x: number, y: number) => {
-              const at = ((frame.y + y) * sheet.width + frame.x + x) * 4;
-              return sheet.pixels[at + 3]
-                ? `#${sheet.pixels.subarray(at, at + 3).toString('hex')}`
-                : undefined;
-            };
-            const rows: PixelCell[][] = [];
-            for (let y = 0; y < frame.h; y += 2) {
-              const row: PixelCell[] = [];
-              for (let x = 0; x < frame.w; x++) {
-                const top = pixel(x, y),
-                  bottom = pixel(x, y + 1);
-                row.push(
-                  top
-                    ? {
-                        glyph: '▀',
-                        foreground: top,
-                        ...(bottom && { background: bottom }),
-                      }
-                    : bottom
-                      ? { glyph: '▄', foreground: bottom }
-                      : { glyph: ' ' },
-                );
-              }
-              rows.push(row);
-            }
-            return { rows, duration };
-          });
-      };
-      return [
-        id,
-        {
-          idle: sequence('idle'),
-          toSpeak: sequence('toSpeak'),
-          toNotSpeak: sequence('toNotSpeak'),
-        },
-      ];
-    }),
-  ) as unknown as Record<AgentId, SpriteAnimations>;
+    agentIds.map((id) => [
+      id,
+      loadSprite(
+        new URL(
+          `../assets/source/agents/${identities[id].asset}`,
+          import.meta.url,
+        ),
+      ),
+    ]),
+  ) as Record<AgentId, SpriteAnimations>;
+}
+
+export function loadKorgSprites(): SpriteAnimations {
+  return loadSprite(new URL('../assets/source/korg/korg', import.meta.url));
+}
+
+/** Loop the loading animation continuously using the exported frame durations. */
+export function loopingFrame(
+  frames: readonly SpriteFrame[],
+  elapsed: number,
+): SpriteFrame {
+  const duration = frames.reduce((total, frame) => total + frame.duration, 0);
+  let remaining = Math.max(0, elapsed) % duration;
+  for (const frame of frames) {
+    if (remaining < frame.duration) return frame;
+    remaining -= frame.duration;
+  }
+  return frames[0]!;
 }
 
 /** Independent local clocks: one idle cycle, then a randomly timed rest. */
