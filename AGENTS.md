@@ -2,7 +2,7 @@
 
 ## Project context
 
-The Idiots is a local TypeScript terminal app using React and Ink. Four agents share a discussion; there is no hosted backend. The TUI and plain transcript use the same working engine, currently one reply batch per user message. The continuous-room behavior below remains the product direction.
+The Idiots is a local TypeScript terminal app using React and Ink. Four agents share a discussion; there is no hosted backend. The TUI and plain transcript use the same working engine, with brief exchanges of at most six public agent messages per user submission. Character identities come from `src/assets/README.md`.
 
 ## Development
 
@@ -20,8 +20,8 @@ The Idiots is a local TypeScript terminal app using React and Ink. Four agents s
 ## Behavior to preserve
 
 - The room has four modes: initial prompt, running, awaiting user, and paused. Agent activity is separate; changing speakers does not change room mode.
-- Discussions are continuous. Proposal selection is optional; do not reintroduce mandatory rounds or selection gates.
-- All four agents review the shared brief before recommendations. Distinguish user constraints from assumptions; agreement on the brief does not require agreement on recommendations.
+- Discussions persist across brief exchanges. Proposal selection is optional; do not reintroduce mandatory rounds or selection gates.
+- Agents share the conversation context. Distinguish user constraints from assumptions; do not require a formal brief or consensus before chatting.
 - Agents ask substantive questions. An explicit `ask_user` pauses for a response; rhetorical questions do not.
 - User input takes priority. Preserve the queue and pending question across pauses, then review stale intentions before speaking.
 - Paused and awaiting-user modes start no new model calls or speaking turns. Respect hard usage budgets, including background calls.

@@ -12,14 +12,15 @@ import { loadSprites } from '../../dist/ui/sprites.js';
 const provider = {
   async *generate(request) {
     const agent =
-      /YOUR PERSPECTIVE — (\w+)/.exec(request.system)?.[1] ?? 'PANEL';
+      panel.find((candidate) => candidate.systemPrompt === request.system)
+        ?.name ?? 'Ruby';
     const text =
       request.kind === 'review'
-        ? 'REVISE\nI would test one clear workflow before expanding the scope.'
+        ? 'REVISE\nLet’s try one small batch first.'
         : request.prompt.includes('ask me') &&
             !request.prompt.includes('(asked the user;')
           ? 'SPEAK\nQUESTION: What would make this demo successful for you?'
-          : `SPEAK\n${agent}: Let us ship a focused demo. We can test the conversation, then polish the characters together.`;
+          : `SPEAK\n${agent} here. I’d start with a dozen muffins and see who comes back.`;
     for (const chunk of text.match(/.{1,12}|\n/g) ?? []) {
       await delay(60, undefined, { signal: request.signal });
       yield chunk;

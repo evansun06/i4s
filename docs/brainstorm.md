@@ -2,6 +2,16 @@
 
 > Four perspectives. One discussion. Your decision.
 
+## Current implementation
+
+The advisor prompts from `4e73532` have been restored: Red, Yellow, Green, and Blue use their original perspectives, shared rules, question policy, and draft review wording. Replies default to under 95 words, with up to 250 words when requested. Compatibility instructions for mentions, deep reasoning, directed follow-ups, temperature, and angry mode remain available. The short coworker-personality experiment is no longer active.
+
+The bounded exchange engine remains. Each user submission opens an exchange of at most six public agent messages, including thinking announcements. Directed follow-ups take priority over unrelated drafts. Explicit `QUESTION:` messages yield for an answer; the original prompts ask questions when the answer would change the advice and discourage consecutive questions. Queued drafts review new context and remove repeated points before speaking.
+
+User input takes priority after the current displayed message. Held drafts survive pauses and the exchange limit. The queue, hidden question display, and pause/compaction fixes remain in place. The earlier exploration below is design context, not a claim that all of its features are implemented.
+
+## Earlier product exploration
+
 ## The idea
 
 **The Idiots is a terminal-based AI discussion panel that helps you make decisions by putting different ways of thinking in the same room.**

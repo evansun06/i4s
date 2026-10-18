@@ -29,9 +29,9 @@ function fixture(script, options = {}) {
   const calls = [];
   const provider = {
     async *generate(request) {
-      const agent = /YOUR PERSPECTIVE — (\w+)/
-        .exec(request.system)?.[1]
-        .toLowerCase();
+      const agent = panel.find(
+        (candidate) => candidate.systemPrompt === request.system,
+      )?.id;
       calls.push({ agent, ...request });
       const text = await script(request, agent, calls.length);
       yield text;
@@ -154,7 +154,7 @@ test('packaged sprites have valid frames and theme colors come directly from the
   assert.equal(animation.frame(9500), 1);
 });
 
-test('busy input is delivered FIFO after the current batch and never duplicates streamed messages', async () => {
+test('busy input takes priority and is delivered FIFO and never duplicates streamed messages', async () => {
   const first = deferred();
   const { controller, engine, calls } = fixture(
     async (_request, _agent, index) => {
@@ -183,7 +183,7 @@ test('busy input is delivered FIFO after the current batch and never duplicates 
     );
     assert.equal(
       controller.snapshot().messages.filter((m) => m.speaker !== 'user').length,
-      3,
+      1,
     );
     assert.deepEqual(
       calls.map((call) => call.agent),
@@ -194,39 +194,26 @@ test('busy input is delivered FIFO after the current batch and never duplicates 
   }
 });
 
-test('a visible question holds old input; an answer submitted while paused has priority after resume', async () => {
-  const first = deferred();
+test('an answer submitted while paused waits for resume', async () => {
   const { controller, engine, calls } = fixture(
-    async (_request, _agent, index) => {
-      if (index === 1) {
-        await first.promise;
-        return 'SPEAK\nQUESTION: What is the deadline?';
-      }
-      return 'SPEAK\nWe can work with that.';
-    },
+    async (_request, _agent, index) =>
+      index === 1
+        ? 'SPEAK\nQUESTION: What is the deadline?'
+        : 'SPEAK\nWe can work with that.',
   );
   try {
     controller.accept('@ruby plan');
-    await until(() => calls.length === 1);
-    controller.accept('@ruby unrelated queued message');
-    first.resolve();
     await until(() => controller.snapshot().question);
     const questionId = controller.snapshot().question.eventId;
-    assert.equal(userMessages(engine).length, 1);
     controller.accept('/pause');
     controller.accept('@ruby tomorrow');
-    assert.equal(controller.snapshot().queued.length, 2);
+    assert.equal(controller.snapshot().queued.length, 1);
     await delay(20);
     assert.equal(calls.length, 1);
     controller.accept('/resume');
-    await until(() => userMessages(engine).length === 3);
+    await until(() => userMessages(engine).length === 2);
     assert.equal(userMessages(engine)[1].text, '@ruby tomorrow');
     assert.equal(userMessages(engine)[1].replyTo, questionId);
-    assert.equal(
-      userMessages(engine)[2].text,
-      '@ruby unrelated queued message',
-    );
-    assert.equal(userMessages(engine)[2].replyTo, undefined);
   } finally {
     await controller.close();
   }
@@ -410,7 +397,10 @@ test('another agent passing does not split or duplicate the displayed speaker', 
   const release = deferred();
   const provider = {
     async *generate(request) {
-      if (request.system.includes('YOUR PERSPECTIVE — RED:')) {
+      if (
+        request.system ===
+        panel.find((candidate) => candidate.id === 'red').systemPrompt
+      ) {
         yield 'SPEAK\nThe first part';
         redStarted.resolve();
         await release.promise;
@@ -443,6 +433,84 @@ test('another agent passing does not split or duplicate the displayed speaker', 
     assert.equal(replies[0].failed, undefined);
   } finally {
     release.resolve();
+    await controller.close();
+  }
+});
+
+test('question protocol stays hidden at every streaming prefix and after restore', async () => {
+  const { messageText } = await import('../dist/ui/message-text.js');
+  const { findQuestion } = await import('../dist/agents/prompts.js');
+  for (const marker of ['QUESTION:', '**QUESTION:**', '**QUESTION**:']) {
+    const raw = `One thing.\n${marker} What is the budget?`;
+    for (let i = 0; i <= raw.length; i++) {
+      const shown = messageText(raw.slice(0, i));
+      assert.ok('One thing.\nWhat is the budget?'.startsWith(shown), shown);
+    }
+    assert.equal(messageText(raw, true), 'One thing.\nWhat is the budget?');
+  }
+  assert.equal(messageText('Q', true), 'Q');
+  assert.equal(messageText('Questionable idea.', true), 'Questionable idea.');
+  assert.equal(findQuestion('Questionable idea.'), undefined);
+  assert.equal(findQuestion('Want muffins?'), undefined);
+  const { controller, engine } = fixture(() => 'SPEAK\nQUESTION: Budget?');
+  let restored;
+  try {
+    controller.accept('@ruby hello');
+    await until(() => controller.snapshot().question);
+    assert.equal(controller.snapshot().messages.at(-1).text, 'Budget?');
+    restored = fixture(() => 'PASS', { restore: engine.save() });
+    assert.equal(
+      restored.controller.snapshot().messages.at(-1).text,
+      'Budget?',
+    );
+  } finally {
+    await controller.close();
+    await restored?.controller.close();
+  }
+});
+
+test('input during paused playback wins the next turn after resume', async () => {
+  const { controller, engine, calls } = fixture(
+    (request, agent) => {
+      if (request.kind === 'review') return 'REVISE\nGot the new direction.';
+      return `SPEAK\n${agent} has something to say.`;
+    },
+    { wpm: 6000 },
+  );
+  try {
+    controller.accept('Hello everyone');
+    await until(() =>
+      controller
+        .snapshot()
+        .messages.some((m) => m.speaker === 'red' && !m.complete),
+    );
+    controller.accept('/pause');
+    const count = calls.length;
+    controller.accept('@bleu change topic');
+    await delay(20);
+    assert.equal(calls.length, count);
+    assert.equal(userMessages(engine).length, 1);
+    controller.accept('/resume');
+    await until(() => userMessages(engine).length === 2);
+    const log = engine.bus.log;
+    const nextUser = log.findIndex(
+      (event) =>
+        event.kind === 'user-message' && event.text.includes('change topic'),
+    );
+    assert.equal(
+      log.slice(0, nextUser).filter((event) => event.kind === 'agent-message')
+        .length,
+      1,
+    );
+    await until(() =>
+      calls.some((call) => call.agent === 'blue' && call.kind === 'review'),
+    );
+    assert.match(
+      calls.find((call) => call.agent === 'blue' && call.kind === 'review')
+        .prompt,
+      /change topic/,
+    );
+  } finally {
     await controller.close();
   }
 });
