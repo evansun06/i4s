@@ -1,3 +1,5 @@
+import { messageText } from './message-text.js';
+import { resolveAgent } from '../agents/identity.js';
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import type { Orchestrator } from '../core/orchestrator.js';
@@ -43,7 +45,8 @@ export async function runPlain(
   // so a raised hand lands right after what you are reading.
   orchestrator.setDisplayGate(() => pacer.idle());
   const status = (line: string) => pacer.line(`${DIM}  · ${line}${RESET}\n`);
-  let current: { agent: AgentId; utterance: Utterance } | undefined;
+  let current:
+    { agent: AgentId; utterance: Utterance; raw: string } | undefined;
   let askingForBudget = false;
 
   /** One prompt. Keys are not watched while it is open. */
@@ -93,20 +96,23 @@ export async function runPlain(
     const next = orchestrator.snapshot();
 
     if (next.speaking?.agent !== current?.agent) {
-      current?.utterance.finish();
+      if (current) {
+        current.utterance.update(messageText(current.raw, true));
+        current.utterance.finish();
+      }
       current = next.speaking && {
         agent: next.speaking.agent,
+        raw: next.speaking.text,
         utterance: pacer.speech(`\n${name(next.speaking.agent)}: `, {
           speaker: agentName(next.speaking.agent),
         }),
       };
     }
-    if (next.speaking) current?.utterance.update(next.speaking.text);
-
-    const turn = next.lastTurn;
-    if (turn && turn !== previous.lastTurn && turn.result === 'withdrew') {
-      status(`${agentName(turn.agent)} dropped their reply; already covered`);
+    if (next.speaking && current) {
+      current.raw = next.speaking.text;
+      current.utterance.update(messageText(next.speaking.text));
     }
+
     if (next.notice && next.notice !== previous.notice) status(next.notice);
 
     if (
@@ -134,7 +140,7 @@ export async function runPlain(
     const { pendingQuestion } = snapshot;
     if (!pendingQuestion) return;
     out.write(
-      `${BOLD}  ? QUESTION FROM ${agentName(pendingQuestion.agent)}: ${pendingQuestion.question}${RESET}\n`,
+      `${BOLD}  ${agentName(pendingQuestion.agent)} is waiting for your reply${RESET}\n`,
     );
     // Drafting or holding a draft: these agents continue after the answer.
     const held = agents
@@ -169,7 +175,9 @@ export async function runPlain(
         event.kind === 'user-message'
           ? `${BOLD}You${RESET}`
           : name(event.agent);
-      out.write(`\n${speaker}: ${event.text}\n`);
+      out.write(
+        `\n${speaker}: ${event.kind === 'agent-message' ? messageText(event.text, true) : event.text}\n`,
+      );
     }
     out.write('\n');
     showQuestion();
@@ -261,9 +269,7 @@ export async function runPlain(
         const words = (think[1] ?? '').split(/\s+/).filter(Boolean);
         const named: AgentId[] = [];
         while (words[0]) {
-          const id = agents.find(
-            (agent) => agent.id === words[0]?.toLowerCase(),
-          )?.id;
+          const id = resolveAgent(words[0]);
           if (id) named.push(id);
           else if (words[0].toLowerCase() !== 'all') break;
           words.shift();

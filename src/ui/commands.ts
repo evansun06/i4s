@@ -17,7 +17,7 @@ export const commands = [
 
 export const helpText =
   commands.map(({ name, help }) => `${name}  ${help}`).join('\n') +
-  '\n\nTab complete · ↑↓ suggestions/history · Esc dismiss · PgUp/PgDn scroll · Ctrl+End live · Ctrl+C quit';
+  '\n\nCtrl+R raise hand · Tab complete · ↑↓ suggestions/history · Esc dismiss · PgUp/PgDn scroll · Ctrl+End live · Ctrl+C quit';
 
 export interface Completion {
   readonly label: string;

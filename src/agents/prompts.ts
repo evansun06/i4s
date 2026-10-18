@@ -1,15 +1,15 @@
 import type { LogEvent } from '../core/types.js';
-import { resolveAgent } from './identity.js';
+import { identities, resolveAgent } from './identity.js';
 
 export type ReplyAction =
   'pass' | 'speak' | 'keep' | 'withdraw' | 'revise' | 'deep';
 
-const LENGTH = `in under 50 words. Go longer (up to 250 words) only if the user's latest message asks you or everyone to expand`;
+const LENGTH = `in under 95 words. Go longer (up to 250 words) only if the user's latest message asks you or everyone to expand`;
 /** The first line is never shown, so naming the addressee there costs nothing. */
 const ADDRESS_LINE = `If your reply mainly answers one advisor, write SPEAK TO <their name> as the first line instead; the user never sees that line.`;
 const ASKING = `To ask, end with one line starting "QUESTION:". The discussion stops until the user answers.`;
-const QUESTION_RULE = `If the user's answer would meaningfully change your advice, ask them: one question, the one that matters most. Otherwise state your assumption and keep going. ${ASKING}`;
-const QUESTION_COOLDOWN = `The user was just asked a question. Avoid asking another unless the discussion can't move forward without it; give your view with a stated assumption instead.`;
+const QUESTION_RULE = `Ask the user at most one question, and only if the answer would change your recommendation; otherwise state your assumption and keep going. To ask, end with one line starting "QUESTION:". The discussion stops until the user answers.`;
+const QUESTION_COOLDOWN = `The user was asked a question recently. Do not ask another; give your view with a stated assumption and let the user steer.`;
 /** Rebuttals settle disagreements, so a tie-breaker question is always allowed. */
 const TIE_BREAKER = `If you two are going in circles, or the disagreement comes down to something only the user can decide (their priorities, constraints, or taste), stop arguing: put the choice to the user as a tie-breaker, with each option in a sentence. ${ASKING}`;
 
@@ -31,7 +31,7 @@ export function transcript(
   return log
     .map((event) => {
       if (event.kind === 'user-message') return `USER: ${event.text}`;
-      const speaker = event.agent.toUpperCase();
+      const speaker = identities[event.agent].name;
       if (!findQuestion(event.text)) return `${speaker}: ${event.text}`;
       const status = answered.has(event.id) ? 'answered' : 'not answered yet';
       return `${speaker} (asked the user; ${status}): ${event.text}`;
@@ -39,10 +39,10 @@ export function transcript(
     .join('\n');
 }
 
-/** True if an agent asked the user something in this round or the one before. */
+/** True if an agent asked the user something in this round or the two before. */
 function questionedRecently(recent: readonly LogEvent[]): boolean {
   let rounds = 0;
-  for (let i = recent.length - 1; i >= 0 && rounds < 2; i -= 1) {
+  for (let i = recent.length - 1; i >= 0 && rounds < 3; i -= 1) {
     const event = recent[i];
     if (event?.kind === 'user-message') rounds += 1;
     else if (event && findQuestion(event.text)) return true;
@@ -177,38 +177,27 @@ Before hearing the messages below the marker, you drafted:
 ${draft}
 
 Reply with exactly one of:
-KEEP (only that word) only if your draft repeats nothing that was said below the marker, no point, example, or recommendation, and does not contradict it.
-WITHDRAW (only that word) if what's left once you remove everything already said isn't worth saying. Sharing a topic is not enough reason to withdraw.
-REVISE on the first line, then an updated reply ${LENGTH}. Cut every point and example someone already made, even if you'd phrase it differently. Lead with what only you are adding, not with agreement. If your recommendation differs from one made below the marker, open by saying so plainly ("I disagree.", "A better approach is...") and say why yours is better. If you take on someone's point, talk directly to that one person ("You're assuming..."), not about them, and say where you see it differently. ${ADDRESS_LINE.replace('SPEAK', 'REVISE')}
+KEEP (only that word) if your draft still adds something and does not contradict what was said.
+WITHDRAW (only that word) if others already made substantially the same point. Sharing a topic is not enough.
+REVISE on the first line, then an updated reply ${LENGTH}. Respond to what was said: challenge any flaw your perspective sees, and drop points that were already covered. ${ADDRESS_LINE.replace('SPEAK', 'REVISE')}
 ${questionRule(context)}${styleLine(temperature)}${moodLine(angry)}`;
 }
 
-/**
- * A reply to an advisor who just challenged this one by name. `exchange` is
- * 1-based, out of `limit` per round; on the last one the agent must settle
- * it or hand the choice to the user.
- */
-export function rebuttalPrompt(
+/** The original reply style, adapted to the current directed-follow-up API. */
+export function followupPrompt(
   context: DiscussionContext,
   challenger: string,
-  exchange: number,
-  limit: number,
   temperature: number,
   angry = false,
 ): string {
-  const last =
-    exchange === limit
-      ? `This is the last exchange this round. If it's still unresolved, don't argue it again: end with a tie-breaker QUESTION for the user.`
-      : `This is exchange ${exchange} of at most ${limit} this round.`;
   return `${render(context)}
 
 ${challenger} just responded to you directly. You may answer them.
-${last}
 Reply with only PASS if you have nothing new to say back, if they convinced you, or if more arguing won't get anywhere. Otherwise put SPEAK on the first line, then your reply to ${challenger} ${LENGTH}. Talk to them directly; it's obvious who you're answering, so don't open with their name. If you still disagree, say so plainly ("No, I still disagree.", "That doesn't fix it.") before your reason. Make one new point, and don't repeat what you've already said.
 ${TIE_BREAKER}${styleLine(temperature)}${moodLine(angry)}`;
 }
 
-export const SUMMARIZER_SYSTEM = `You keep the running record of a discussion between a user and four advisors: RED (action), YELLOW (possibilities), GREEN (people), and BLUE (evidence). The advisors rely on your summary instead of the older messages, so precision matters more than brevity.`;
+export const SUMMARIZER_SYSTEM = `You keep the running record of a discussion between a user and four advisors: ${identities.red.name} (Red, action), ${identities.yellow.name} (Yellow, possibilities), ${identities.green.name} (Green, people), and ${identities.blue.name} (Blue, evidence). The advisors rely on your summary instead of the older messages, so precision matters more than brevity.`;
 
 export function summaryPrompt(
   previous: string,
@@ -262,7 +251,7 @@ export function parseReply(
 
 /**
  * Agents spoken to by name, as in "Blue, you're assuming..." at the start of
- * a sentence, in order. Used to find who was challenged and may rebut.
+ * a sentence, in order. Used to find who was addressed and may reply.
  */
 export function findAddressed<Id extends string>(
   text: string,
@@ -271,7 +260,9 @@ export function findAddressed<Id extends string>(
   const found: Id[] = [];
   for (const [, name = ''] of text.matchAll(/(?:^|[.!?]\s+)(\w+)\s*,/g)) {
     const agent = agents.find(
-      (candidate) => candidate.name.toLowerCase() === name.toLowerCase(),
+      (candidate) =>
+        candidate.name.toLowerCase() === name.toLowerCase() ||
+        candidate.id === (resolveAgent(name) ?? name.toLowerCase()),
     );
     if (agent && !found.includes(agent.id)) found.push(agent.id);
   }
@@ -295,7 +286,7 @@ export function findMentions<Id extends string>(
 export function findQuestion(text: string): string | undefined {
   const lines = text.split('\n').reverse();
   for (const line of lines) {
-    const match = /^\s*\**QUESTION:?\**:?\s*(.+)$/i.exec(line);
+    const match = /^\s*\**QUESTION\b:?\**:?\s*(.+)$/i.exec(line);
     if (match?.[1]) return match[1].trim();
   }
   return undefined;

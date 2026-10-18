@@ -35,7 +35,7 @@ export function activityLabel(
   const activity = state.room.agents[id].activity;
   if (activity === 'speaking') return 'waiting';
   if (activity === 'has-question')
-    return state.question?.agent === id ? 'asking you' : 'has a question';
+    return state.question?.agent === id ? 'asking you' : 'waiting';
   if (activity === 'deliberating') return 'thinking deeply';
   if (activity === 'passing') return 'passed';
   return activity;
@@ -213,6 +213,10 @@ export function App({
       return;
     }
     if (state.closing) return;
+    if (key.ctrl && input === 'r') {
+      controller.raiseHand();
+      return;
+    }
     if (key.ctrl && key.end) {
       setScrollTop(undefined);
       return;
@@ -306,10 +310,14 @@ export function App({
       ? `Next: ${state.room.queue.map((id) => identities[id].name).join(' → ')}`
       : ' ';
   const notice = state.question
-    ? `${identities[state.question.agent].name} asks: ${state.question.question}`
+    ? `${identities[state.question.agent].name} is waiting for your reply`
     : state.room.mode === 'paused'
       ? (state.room.notice ?? 'Paused · /resume to continue')
-      : (state.room.notice ?? ' ');
+      : state.room.handRaised
+        ? state.displaying || state.waiting.length
+          ? 'Hand raised · you speak next'
+          : 'Your turn'
+        : (state.room.notice ?? ' ');
   return (
     <Box
       width={columns}
@@ -458,7 +466,8 @@ export function App({
       </Box>
       <Box height={1} flexShrink={0}>
         <Text color={theme.muted} wrap="truncate">
-          / commands · Tab complete · PgUp/PgDn history · Ctrl+C quit
+          Ctrl+R raise hand · / commands · Tab complete · PgUp/PgDn history ·
+          Ctrl+C quit
         </Text>
       </Box>
     </Box>

@@ -5,7 +5,7 @@ import {
   findMentions,
   findQuestion,
   parseReply,
-  rebuttalPrompt,
+  followupPrompt,
   reviewPrompt,
   SUMMARIZER_SYSTEM,
   summaryPrompt,
@@ -18,6 +18,7 @@ import {
   type ModelProvider,
   type ModelRequest,
 } from '../providers/model.js';
+import { resolveAgent } from '../agents/identity.js';
 import { EventBus } from './events.js';
 import { assertTransition } from './room.js';
 import type {
@@ -67,25 +68,32 @@ const SUMMARY_TOKENS = 4096;
 const DEEP_TOKENS = 16000;
 /** Deep replies agents may ask for per round, so a round cannot snowball. */
 const MAX_DEEP_PER_ROUND = 2;
-/** Back-and-forth replies between agents per round, after the main replies. */
-const MAX_REBUTTALS = 3;
-const MANUAL_ANNOUNCEMENT =
-  'You asked me to think this one through, so give me a moment.';
+/** A brief exchange, not an endless autonomous discussion. */
+const MAX_MESSAGES = 6;
+const MANUAL_ANNOUNCEMENT = 'Give me a moment to think.';
 const MAX_ATTEMPTS = 4;
 const MAX_RETRY_SECONDS = 60;
 
 /** Granted the floor, sent back to redraft, or dropped for this round. */
 type FloorTurn = 'granted' | 'redraft' | 'drop';
 
-/**
- * Runs one round per user message. Every agent drafts a reply at once; the
- * first with something to say speaks live. The rest wait for the floor and
- * review what they missed before speaking, so they keep listening.
- *
- * A question for the user ends the round at once. Agents still holding a
- * draft keep it and go first next round, after reviewing the user's answer.
- * Agents never carry on a discussion without the user.
- */
+type ReviewResult =
+  | { kind: 'keep'; text: string; to: string | undefined; heardUpTo: number }
+  | { kind: 'withdraw' | 'failed'; heardUpTo: number; notice?: string };
+
+interface QueuedContribution {
+  agent: AgentDefinition;
+  text: string;
+  to: string | undefined;
+  heardUpTo: number;
+  announcement: boolean;
+  reviewing: boolean;
+  result?: ReviewResult;
+  cancelled?: FloorTurn;
+  wake: (turn: FloorTurn) => void;
+}
+
+/** Short exchanges with directed follow-ups and user priority between messages. */
 export class Orchestrator {
   readonly bus: EventBus;
   readonly #agents: readonly AgentDefinition[];
@@ -94,15 +102,14 @@ export class Orchestrator {
   readonly #conditions = new Set<() => void>();
   readonly #agentStates = new Map<AgentId, AgentState>();
   readonly #agentListeners = new Set<AgentListener>();
-  readonly #lastSpoke = new Map<AgentId, number>();
   readonly #shutdown = new AbortController();
   #disposed = false;
   /** Agents with a contribution in progress; they can span rounds. */
   readonly #active = new Set<AgentId>();
-  readonly #floorQueue: {
-    agent: AgentId;
-    wake: (turn: FloorTurn) => void;
-  }[] = [];
+  readonly #floorQueue: QueuedContribution[] = [];
+  #scheduling = false;
+  #displayWaiting = false;
+  #displayRevision = -1;
   /** Agents @mentioned this round; empty means everyone takes part. */
   #mentioned: readonly AgentId[] = [];
   /** Agents reasoning at high effort right now; others wanting to wait. */
@@ -114,8 +121,12 @@ export class Orchestrator {
   #angry = false;
   /** The user wants the floor once the current speaker finishes. */
   #handRaised = false;
-  /** Whom each agent message mainly answered, by log id; not saved. */
-  readonly #answeredWhom = new Map<number, AgentId>();
+  #messagesThisExchange = 0;
+  readonly #followups = new Map<
+    AgentId,
+    { eventId: number; speaker: string }
+  >();
+  readonly #readThrough = new Map<AgentId, number>();
   /** Agents the user asked to think deeply this round, not yet started. */
   readonly #deepRequested = new Set<AgentId>();
   readonly #temperatures = new Map<AgentId, number>();
@@ -128,7 +139,6 @@ export class Orchestrator {
   #resumeTo: RoomMode = 'running';
   #speaking: RoomSnapshot['speaking'];
   #pendingQuestion: RoomSnapshot['pendingQuestion'];
-  #spokeThisRound = false;
   #notice: string | undefined;
   #lastTurn: RoomSnapshot['lastTurn'];
   #callsUsed = 0;
@@ -167,9 +177,7 @@ export class Orchestrator {
     }
     this.#mode = 'awaiting-user';
     for (const event of this.bus.log) {
-      if (event.kind === 'agent-message')
-        this.#lastSpoke.set(event.agent, event.id);
-      else this.#roundStartedAt = event.id;
+      if (event.kind === 'user-message') this.#roundStartedAt = event.id;
     }
     // Drafts held for an answer are not saved; agents redraft after it.
     if (saved.pendingQuestion) {
@@ -200,7 +208,7 @@ export class Orchestrator {
         AgentId,
         AgentState
       >,
-      queue: this.#floorQueue.map((waiter) => waiter.agent),
+      queue: this.#orderedQueue().map((entry) => entry.agent.id),
       mentioned: this.#mentioned,
       handRaised: this.#handRaised,
       angry: this.#angry,
@@ -265,9 +273,10 @@ export class Orchestrator {
     const answering = pending !== undefined && options.answer !== false;
     this.#pendingQuestion = undefined;
     if (pending) this.#setAgent(pending.agent, 'listening');
-    this.#spokeThisRound = false;
     this.#deepThisRound = 0;
     this.#handRaised = false;
+    this.#messagesThisExchange = 0;
+    this.#followups.clear();
     this.#deepRequested.clear();
     for (const id of options.deep ?? []) this.#deepRequested.add(id);
     const event = this.bus.append({
@@ -283,12 +292,13 @@ export class Orchestrator {
     if (pending && !answering) this.#discardBefore = event.id;
     // Held drafts: excluded agents drop theirs; after a set-aside question,
     // everyone else redrafts.
-    for (const waiter of this.#floorQueue.splice(0)) {
-      if (!this.#takesPart(waiter.agent)) waiter.wake('drop');
-      else if (pending && !answering) waiter.wake('redraft');
-      // Asked to think deeply: start over rather than use the held draft.
-      else if (this.#deepRequested.has(waiter.agent)) waiter.wake('redraft');
-      else this.#floorQueue.push(waiter);
+    for (const entry of [...this.#floorQueue]) {
+      if (!this.#takesPart(entry.agent.id)) this.#removeQueued(entry, 'drop');
+      else if (
+        (pending && !answering) ||
+        this.#deepRequested.has(entry.agent.id)
+      )
+        this.#removeQueued(entry, 'redraft');
     }
     this.#setMode('running');
     // Drafts held over from before the question go first.
@@ -306,19 +316,12 @@ export class Orchestrator {
     // After a question, also wait for the asker to finish, so it is free to
     // reply in the very next round.
     const settled = () =>
-      this.#active.size === 0 ||
+      (this.#active.size === 0 && this.#followups.size === 0) ||
       (this.#pendingQuestion !== undefined &&
         !this.#active.has(this.#pendingQuestion.agent)) ||
-      (this.#handRaised && !this.#floorBusy);
+      (this.#yielding && !this.#floorBusy);
     await this.#until(settled);
     if (this.#disposed) return;
-    // Everyone passed: the user still gets one reply.
-    if (!this.#spokeThisRound && !this.#pendingQuestion && !this.#handRaised) {
-      this.#start(this.#quietest(), true);
-      await this.#until(settled);
-      if (this.#disposed) return;
-    }
-    if (this.#active.size === 0) await this.#rebuttals();
     // Held drafts point into recent messages, so only condense between them.
     if (this.#active.size === 0) await this.#compact();
     if (this.#disposed) return;
@@ -327,87 +330,28 @@ export class Orchestrator {
     else this.#setMode('awaiting-user');
   }
 
-  /**
-   * Lets an agent challenged by name ("Blue, you're assuming...") answer
-   * back, and so on, up to MAX_REBUTTALS times. The chain stops when the
-   * challenged agent passes, nobody is addressed, or someone asks the user
-   * to break the tie.
-   */
-  async #rebuttals(): Promise<void> {
-    for (let exchange = 1; exchange <= MAX_REBUTTALS; exchange += 1) {
-      if (this.#pendingQuestion || this.#handRaised) return;
-      const last = this.bus.log.at(-1);
-      if (last?.kind !== 'agent-message' || last.id <= this.#roundStartedAt) {
-        return;
-      }
-      // Who the reply was aimed at: from its hidden first line, else from
-      // a name it opens a sentence with.
-      const target = [
-        this.#answeredWhom.get(last.id),
-        ...findAddressed(last.text, this.#agents),
-      ].find(
-        (id) => id !== undefined && id !== last.agent && this.#takesPart(id),
-      );
-      const agent = this.#agents.find((candidate) => candidate.id === target);
-      if (!agent) return;
-      if (!(await this.#rebut(agent, last.agent, exchange))) return;
-    }
+  get #yielding(): boolean {
+    return this.#handRaised || this.#messagesThisExchange >= MAX_MESSAGES;
   }
 
-  /** One rebuttal; resolves true if the agent spoke. */
-  async #rebut(
-    agent: AgentDefinition,
-    challenger: AgentId,
-    exchange: number,
-  ): Promise<boolean> {
-    this.#setAgent(agent.id, 'thinking');
-    await this.#waitRunning();
-    const challengerName =
-      this.#agents.find((other) => other.id === challenger)?.name ?? challenger;
-    let raw = '';
-    try {
-      for await (const chunk of this.#generate(agent.name, {
-        kind: 'draft',
-        system: agent.systemPrompt,
-        prompt: rebuttalPrompt(
-          this.#context(),
-          challengerName,
-          exchange,
-          MAX_REBUTTALS,
-          this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
-          this.#angry,
-        ),
-        maxOutputTokens: REPLY_TOKENS,
-      })) {
-        raw += chunk;
-        const reply = parseReply(raw, false);
-        if (reply && reply.action !== 'speak') break;
+  #startFollowups(): void {
+    if (
+      this.#disposed ||
+      this.#mode !== 'running' ||
+      this.#pendingQuestion ||
+      this.#yielding
+    )
+      return;
+    for (const [id, request] of this.#followups) {
+      if (this.#active.has(id)) continue;
+      if ((this.#readThrough.get(id) ?? 0) > request.eventId) {
+        this.#followups.delete(id);
+        continue;
       }
-    } catch (error) {
-      this.#notice = `${agent.name} could not respond: ${errorMessage(error)}`;
-      this.#endTurn(agent.id, 'failed');
-      return false;
+      const agent = this.#agents.find((candidate) => candidate.id === id);
+      if (agent && this.#takesPart(id)) this.#start(agent, false);
+      else this.#followups.delete(id);
     }
-
-    const reply = parseReply(raw, true);
-    if (reply?.action !== 'speak' || !reply.body) {
-      this.#endTurn(agent.id, 'passed');
-      return false;
-    }
-    await this.#waitForDisplay();
-    // The user raised a hand (or paused) meanwhile: they go first, and a
-    // rebuttal to an argument they cut off is not worth holding.
-    if (this.#handRaised || this.#mode !== 'running') {
-      this.#setAgent(agent.id, 'listening');
-      return false;
-    }
-    this.#floorBusy = true;
-    try {
-      this.#commit(agent.id, reply.body, challenger);
-    } finally {
-      this.#releaseFloor();
-    }
-    return true;
   }
 
   #takesPart(agent: AgentId): boolean {
@@ -437,7 +381,13 @@ export class Orchestrator {
    * no round is running.
    */
   raiseHand(): boolean {
-    if (this.#mode !== 'running' || this.#handRaised) return false;
+    if (
+      this.#disposed ||
+      this.#handRaised ||
+      (this.#mode !== 'running' &&
+        !(this.#mode === 'paused' && this.#resumeTo === 'running'))
+    )
+      return false;
     this.#handRaised = true;
     this.#changed();
     return true;
@@ -456,6 +406,7 @@ export class Orchestrator {
     if (this.#callsUsed >= this.#callLimit) return false;
     this.#notice = undefined;
     this.#setMode(this.#resumeTo);
+    this.#startFollowups();
     this.#grantFloor();
     return true;
   }
@@ -501,6 +452,8 @@ export class Orchestrator {
       })
       .finally(() => {
         this.#active.delete(agent.id);
+        this.#startFollowups();
+        this.#grantFloor();
         this.#changed();
       });
   }
@@ -527,22 +480,35 @@ export class Orchestrator {
     this.#setAgent(agent.id, deep ? 'deliberating' : 'thinking');
     await this.#waitRunning();
     const heardUpTo = this.bus.log.length;
+    this.#readThrough.set(agent.id, heardUpTo);
+    const followup = this.#followups.get(agent.id);
     let raw = '';
     let live = false;
+    let reserved = false;
     try {
       for await (const chunk of this.#generate(agent.name, {
         kind: 'draft',
         system: agent.systemPrompt,
-        prompt: draftPrompt(this.#context(), {
-          forced,
-          angry: this.#angry,
-          temperature: this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
-          addressed: this.#mentioned.map(
-            (id) => this.#agents.find((other) => other.id === id)?.name ?? id,
-          ),
-          allowDeep: !deep && this.#deepThisRound < MAX_DEEP_PER_ROUND,
-          ...(deep && { deepAnnouncement: deep.announcement }),
-        }),
+        prompt:
+          followup && !deep
+            ? followupPrompt(
+                this.#context(),
+                followup.speaker,
+                this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
+                this.#angry,
+              )
+            : draftPrompt(this.#context(), {
+                forced,
+                angry: this.#angry,
+                temperature:
+                  this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
+                addressed: this.#mentioned.map(
+                  (id) =>
+                    this.#agents.find((other) => other.id === id)?.name ?? id,
+                ),
+                allowDeep: !deep && this.#deepThisRound < MAX_DEEP_PER_ROUND,
+                ...(deep && { deepAnnouncement: deep.announcement }),
+              }),
         maxOutputTokens: deep ? DEEP_TOKENS : REPLY_TOKENS,
         ...(deep && { effort: 'high' as const }),
       })) {
@@ -551,12 +517,30 @@ export class Orchestrator {
         if (!reply) continue;
         if (reply.action !== 'speak') break;
         // Nobody has spoken since this draft began, so it can stream live.
-        live ||= this.#claimFloorNow(heardUpTo);
+        if (!live && this.#claimFloorNow(agent.id, heardUpTo)) {
+          reserved = true;
+          await this.#waitForDisplay();
+          this.#shutdown.signal.throwIfAborted();
+          if (
+            this.#mode === 'running' &&
+            !this.#pendingQuestion &&
+            !this.#yielding &&
+            this.bus.log.length === heardUpTo &&
+            !this.#floorQueue.some(
+              (entry) => entry.reviewing || entry.heardUpTo !== heardUpTo,
+            )
+          )
+            live = true;
+          else {
+            reserved = false;
+            this.#releaseFloor();
+          }
+        }
         if (live) this.#showSpeech(agent.id, reply.body);
       }
     } catch (error) {
       this.#notice = `${agent.name} could not respond: ${errorMessage(error)}`;
-      if (live) this.#releaseFloor();
+      if (reserved) this.#releaseFloor();
       this.#endTurn(agent.id, 'failed');
       return 'done';
     }
@@ -570,7 +554,7 @@ export class Orchestrator {
     }
     if (!live && heardUpTo <= this.#discardBefore) return 'stale';
     if (draft?.action === 'deep' && !deep) {
-      return this.#deliberate(agent, forced, draft.body);
+      return this.#deliberate(agent, forced, draft.body, false, heardUpTo);
     }
     const passed = draft?.action !== 'speak' || !draft.body;
     // A pass decided before the user's latest message is not a pass on it.
@@ -586,51 +570,62 @@ export class Orchestrator {
       return 'done';
     }
 
-    return this.#deliver(agent, draft.body, draft.to, heardUpTo);
+    const delivered = await this.#deliver(
+      agent,
+      draft.body,
+      draft.to,
+      heardUpTo,
+    );
+    return delivered === 'stale' ? 'stale' : 'done';
   }
 
-  /**
-   * Waits for the floor, reviews the draft against anything said since it
-   * was written, and delivers it once everything before it has finished
-   * showing. If the user raised a hand first, the reply is held for the next
-   * round, where it is reviewed against what the user said.
-   */
+  /** Queue-owned drafts are reviewed together before anyone takes the floor. */
   async #deliver(
     agent: AgentDefinition,
     text: string,
     to: string | undefined,
     heardUpTo: number,
-  ): Promise<'done' | 'stale'> {
-    while (true) {
-      this.#setAgent(agent.id, findQuestion(text) ? 'has-question' : 'waiting');
-      const turn = await this.#takeFloor(agent.id);
+    announcement = false,
+  ): Promise<'done' | 'stale' | { text: string }> {
+    const entry: QueuedContribution = {
+      agent,
+      text,
+      to,
+      heardUpTo,
+      announcement,
+      reviewing: false,
+      wake: () => {},
+    };
+    let front = false;
+    while (!this.#disposed) {
+      this.#setAgent(
+        agent.id,
+        findQuestion(entry.text) ? 'has-question' : 'waiting',
+      );
+      const turn = await this.#takeFloor(entry, front);
+      front = true;
       if (turn === 'redraft') return 'stale';
-      if (turn === 'drop') {
-        this.#setAgent(agent.id, 'listening');
-        return 'done';
-      }
-      let held = false;
+      if (turn === 'drop') return 'done';
+      let retry = false;
       try {
-        if (this.bus.log.length !== heardUpTo) {
-          const reviewed = await this.#review(agent, text, heardUpTo, to);
-          if (!reviewed) return 'done';
-          ({ text, to } = reviewed);
-          heardUpTo = this.bus.log.length;
+        if (
+          !this.#canProgress ||
+          this.#floorQueue.some(
+            (queued) =>
+              queued.reviewing || queued.heardUpTo !== this.bus.log.length,
+          )
+        ) {
+          retry = true;
+          continue;
         }
-        await this.#waitForDisplay();
-        if (this.#handRaised) held = true;
-        else this.#commit(agent.id, text, to);
+        if (announcement) this.#announce(agent.id, entry.text);
+        else this.#commit(agent.id, entry.text, entry.to);
+        return { text: entry.text };
       } finally {
-        this.#releaseFloor();
-      }
-      if (!held) return 'done';
-      this.#setAgent(agent.id, findQuestion(text) ? 'has-question' : 'waiting');
-      await this.#until(() => !this.#handRaised && this.#mode === 'running');
-      if (!this.#takesPart(agent.id)) {
-        this.#setAgent(agent.id, 'listening');
-        return 'done';
+        this.#releaseFloor(!retry);
       }
     }
+    return 'done';
   }
 
   /**
@@ -646,6 +641,7 @@ export class Orchestrator {
     forced: boolean,
     announcement: string,
     manual = false,
+    heardUpTo = this.bus.log.length,
   ): Promise<'done' | 'stale'> {
     const busy = [...this.#deepActive].find((id) => id !== agent.id);
     if (!manual && busy !== undefined) {
@@ -669,32 +665,17 @@ export class Orchestrator {
     this.#deepActive.add(agent.id);
     this.#deepThisRound += 1;
     try {
-      const turn = await this.#takeFloor(agent.id);
-      if (turn === 'redraft') return 'stale';
-      if (turn === 'drop') {
-        this.#setAgent(agent.id, 'listening');
-        return 'done';
-      }
-      let held = false;
-      try {
-        await this.#waitForDisplay();
-        if (this.#handRaised) held = true;
-        else {
-          this.#announce(
-            agent.id,
-            announcement || 'Let me think this one through properly.',
-          );
-        }
-      } finally {
-        this.#releaseFloor();
-      }
-      // The user took the floor first; reconsider after hearing them.
-      if (held) {
-        this.#setAgent(agent.id, 'waiting');
-        await this.#until(() => !this.#handRaised && this.#mode === 'running');
-        return 'stale';
-      }
-      return await this.#attempt(agent, forced, { announcement });
+      const delivered = await this.#deliver(
+        agent,
+        announcement || 'Let me think this one through properly.',
+        undefined,
+        heardUpTo,
+        true,
+      );
+      if (typeof delivered === 'string') return delivered;
+      return await this.#attempt(agent, forced, {
+        announcement: delivered.text,
+      });
     } finally {
       this.#deepActive.delete(agent.id);
       this.#changed();
@@ -705,62 +686,70 @@ export class Orchestrator {
   #announce(agent: AgentId, text: string): void {
     if (this.#disposed) return;
     this.#showSpeech(agent, text);
-    const event = this.bus.append({ kind: 'agent-message', agent, text });
-    this.#lastSpoke.set(agent, event.id);
-    this.#spokeThisRound = true;
+    this.#messagesThisExchange += 1;
+    this.bus.append({ kind: 'agent-message', agent, text });
     this.#speaking = undefined;
     this.#setAgent(agent, 'deliberating');
   }
 
-  /**
-   * Called while holding the floor: keep, revise, or drop a stale draft.
-   * Returns what to say, or undefined if the agent withdrew or failed.
-   */
-  async #review(
-    agent: AgentDefinition,
-    draft: string,
-    heardUpTo: number,
-    draftTo: string | undefined,
-  ): Promise<{ text: string; to: string | undefined } | undefined> {
-    await this.#waitRunning();
-    this.#setAgent(agent.id, 'reviewing');
+  /** Captures context at the actual call start, including after budget waits. */
+  async #review(entry: QueuedContribution): Promise<ReviewResult> {
+    const { agent } = entry;
+    let heardUpTo = entry.heardUpTo;
     let raw = '';
     try {
-      for await (const chunk of this.#generate(agent.name, {
-        kind: 'review',
-        system: agent.systemPrompt,
-        prompt: reviewPrompt(
-          draft,
-          this.#context(),
-          heardUpTo - this.#foldedUpTo,
-          this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
-          this.#angry,
-        ),
-        maxOutputTokens: REPLY_TOKENS,
-      })) {
+      for await (const chunk of this.#generate(
+        agent.name,
+        () => {
+          heardUpTo = this.bus.log.length;
+          this.#readThrough.set(agent.id, heardUpTo);
+          return {
+            kind: 'review',
+            system: agent.systemPrompt,
+            prompt:
+              reviewPrompt(
+                entry.text,
+                this.#context(),
+                entry.heardUpTo - this.#foldedUpTo,
+                this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
+                this.#angry,
+              ) +
+              (entry.announcement
+                ? '\nThis draft announces planned deep reasoning. KEEP or REVISE the announcement if that work is still useful; WITHDRAW if it is already covered. Do not replace the announcement with the answer.'
+                : ''),
+            maxOutputTokens: REPLY_TOKENS,
+          };
+        },
+        () => !entry.cancelled,
+      )) {
         raw += chunk;
-        // KEEP and WITHDRAW are one word; stop as soon as one arrives.
         const reply = parseReply(raw, false);
-        if (reply && reply.action !== 'revise' && reply.action !== 'speak') {
+        if (reply && reply.action !== 'revise' && reply.action !== 'speak')
           break;
-        }
       }
     } catch (error) {
-      this.#notice = `${agent.name} could not respond: ${errorMessage(error)}`;
-      this.#endTurn(agent.id, 'failed');
-      return undefined;
+      return {
+        kind: 'failed',
+        heardUpTo,
+        notice: `${agent.name} could not review: ${errorMessage(error)}`,
+      };
     }
-
     const reply = parseReply(raw, true);
-    if (reply?.action === 'keep') return { text: draft, to: draftTo };
+    if (reply?.action === 'keep')
+      return { kind: 'keep', text: entry.text, to: entry.to, heardUpTo };
     if (
       (reply?.action === 'revise' || reply?.action === 'speak') &&
-      reply.body
-    ) {
-      return { text: reply.body, to: reply.to };
-    }
-    this.#endTurn(agent.id, 'withdrew');
-    return undefined;
+      reply.body &&
+      /^(?:REVISE|SPEAK)\b/i.test(raw.trim())
+    )
+      return { kind: 'keep', text: reply.body, to: reply.to, heardUpTo };
+    if (reply?.action === 'withdraw' || reply?.action === 'pass')
+      return { kind: 'withdraw', heardUpTo };
+    return {
+      kind: 'failed',
+      heardUpTo,
+      notice: `${agent.name} returned an invalid review; reply dropped.`,
+    };
   }
 
   #context(): DiscussionContext {
@@ -787,6 +776,16 @@ export class Orchestrator {
    * is always kept word for word.
    */
   async #compact(): Promise<void> {
+    // Maintenance must not hold a round open while the user needs the floor.
+    // Leave older messages intact and try again at a later round boundary.
+    if (
+      this.#disposed ||
+      this.#mode !== 'running' ||
+      this.#pendingQuestion ||
+      this.#yielding
+    ) {
+      return;
+    }
     const log = this.bus.log;
     if (estimateTokens(log.slice(this.#foldedUpTo)) < this.#compactAtTokens) {
       return;
@@ -799,7 +798,6 @@ export class Orchestrator {
     }
     if (cut === this.#foldedUpTo) return;
 
-    await this.#waitRunning();
     this.#notice = 'Condensing earlier rounds';
     this.#changed();
     let summary = '';
@@ -834,13 +832,18 @@ export class Orchestrator {
     // A kept draft was never streamed, so it is shown whole before committing.
     this.#showSpeech(agent, text);
     const question = findQuestion(text);
+    this.#messagesThisExchange += 1;
     const event = this.bus.append({ kind: 'agent-message', agent, text });
-    const target = this.#agents.find(
-      (other) => other.id === to || other.name.toLowerCase() === to,
-    )?.id;
-    if (target && target !== agent) this.#answeredWhom.set(event.id, target);
-    this.#lastSpoke.set(agent, event.id);
-    this.#spokeThisRound = true;
+    const target = [
+      to ? resolveAgent(to) : undefined,
+      ...findAddressed(text, this.#agents),
+    ].find((id) => id !== undefined && id !== agent && this.#takesPart(id));
+    if (target) {
+      this.#followups.set(target, {
+        eventId: event.id,
+        speaker: this.#agents.find((other) => other.id === agent)!.name,
+      });
+    }
     if (question) {
       // Ends the round: no one else takes the floor until the user answers.
       this.#pendingQuestion = { agent, eventId: event.id, question };
@@ -848,6 +851,7 @@ export class Orchestrator {
     } else {
       this.#endTurn(agent, 'spoke');
     }
+    this.#startFollowups();
   }
 
   #showSpeech(agent: AgentId, text: string): void {
@@ -869,13 +873,15 @@ export class Orchestrator {
     this.#setAgent(agent, activity[result]);
   }
 
-  #claimFloorNow(heardUpTo: number): boolean {
+  #claimFloorNow(agent: AgentId, heardUpTo: number): boolean {
     if (
       this.#floorBusy ||
       this.#floorQueue.length ||
       this.#mode !== 'running' ||
       this.#pendingQuestion ||
-      this.#handRaised ||
+      this.#yielding ||
+      (this.#followups.size > 0 &&
+        this.#followups.keys().next().value !== agent) ||
       this.bus.log.length !== heardUpTo
     ) {
       return false;
@@ -884,51 +890,169 @@ export class Orchestrator {
     return true;
   }
 
-  /**
-   * First come, first served; held while paused or awaiting an answer.
-   * The user's next message may instead send the draft back or drop it.
-   */
-  #takeFloor(agent: AgentId): Promise<FloorTurn> {
+  get #canProgress(): boolean {
+    return (
+      !this.#disposed &&
+      this.#mode === 'running' &&
+      !this.#pendingQuestion &&
+      !this.#yielding
+    );
+  }
+
+  #orderedQueue(): QueuedContribution[] {
+    const priority = this.#followups.keys().next().value;
+    return [...this.#floorQueue].sort(
+      (a, b) =>
+        Number(b.agent.id === priority) - Number(a.agent.id === priority),
+    );
+  }
+
+  #takeFloor(entry: QueuedContribution, front = false): Promise<FloorTurn> {
     if (this.#disposed) return Promise.resolve('drop');
     return new Promise((wake) => {
-      this.#floorQueue.push({ agent, wake });
+      entry.wake = wake;
+      if (front) this.#floorQueue.unshift(entry);
+      else this.#floorQueue.push(entry);
       this.#changed();
       this.#grantFloor();
     });
   }
 
-  #grantFloor(): void {
+  #removeQueued(entry: QueuedContribution, turn: FloorTurn): void {
+    const index = this.#floorQueue.indexOf(entry);
+    if (index < 0) return;
+    this.#floorQueue.splice(index, 1);
+    entry.cancelled = turn;
     if (
-      this.#disposed ||
-      this.#floorBusy ||
-      this.#mode !== 'running' ||
-      this.#pendingQuestion ||
-      this.#handRaised
-    ) {
-      return;
-    }
-    const next = this.#floorQueue.shift();
-    if (!next) return;
-    this.#floorBusy = true;
+      ['reviewing', 'waiting', 'has-question'].includes(
+        this.agentState(entry.agent.id).activity,
+      )
+    )
+      this.#setAgent(entry.agent.id, 'listening');
+    // Keep the contribution active until its call finishes: never overlap
+    // an old review with a new draft from the same agent.
+    if (!entry.reviewing) entry.wake(turn);
     this.#changed();
-    next.wake('granted');
   }
 
-  #releaseFloor(): void {
+  #grantFloor(): void {
+    if (!this.#canProgress || this.#scheduling) return;
+    this.#scheduling = true;
+    try {
+      for (const entry of [...this.#floorQueue]) {
+        const result = entry.result;
+        if (result) {
+          delete entry.result;
+          if (result.kind === 'keep') {
+            entry.text = result.text;
+            entry.to = result.to;
+            entry.heardUpTo = result.heardUpTo;
+          } else if (result.heardUpTo === this.bus.log.length) {
+            if (result.notice) this.#notice = result.notice;
+            this.#endTurn(
+              entry.agent.id,
+              result.kind === 'failed' ? 'failed' : 'withdrew',
+            );
+            this.#removeQueued(entry, 'drop');
+            continue;
+          }
+          this.#setAgent(
+            entry.agent.id,
+            findQuestion(entry.text) ? 'has-question' : 'waiting',
+          );
+        }
+        if (!this.#canProgress) return;
+        if (!entry.reviewing && entry.heardUpTo !== this.bus.log.length) {
+          entry.reviewing = true;
+          this.#setAgent(entry.agent.id, 'reviewing');
+          void this.#review(entry)
+            .then((result) => {
+              if (!entry.cancelled && !this.#disposed) entry.result = result;
+            })
+            .finally(() => {
+              entry.reviewing = false;
+              if (entry.cancelled) entry.wake(entry.cancelled);
+              else if (!this.#canProgress && !this.#disposed)
+                this.#setAgent(
+                  entry.agent.id,
+                  findQuestion(entry.text) ? 'has-question' : 'waiting',
+                );
+              this.#grantFloor();
+              this.#changed();
+            });
+        }
+      }
+      if (
+        !this.#canProgress ||
+        this.#floorBusy ||
+        this.#floorQueue.some(
+          (entry) => entry.reviewing || entry.heardUpTo !== this.bus.log.length,
+        )
+      )
+        return;
+      const priority = this.#followups.keys().next().value;
+      const next = this.#orderedQueue()[0];
+      if (!next || (priority && next.agent.id !== priority)) return;
+      if (this.#displayRevision !== this.bus.log.length) {
+        if (!this.#displayWaiting) {
+          this.#displayWaiting = true;
+          const revision = this.bus.log.length;
+          void this.#waitForDisplay()
+            .then(() => {
+              this.#displayRevision = revision;
+            })
+            .catch((error: unknown) => {
+              this.#notice = `Could not finish playback: ${errorMessage(error)}`;
+              this.pause();
+            })
+            .finally(() => {
+              this.#displayWaiting = false;
+              this.#grantFloor();
+              this.#changed();
+            });
+        }
+        return;
+      }
+      this.#floorQueue.splice(this.#floorQueue.indexOf(next), 1);
+      this.#floorBusy = true;
+      next.wake('granted');
+      this.#changed();
+    } finally {
+      this.#scheduling = false;
+    }
+  }
+
+  #releaseFloor(schedule = true): void {
     this.#floorBusy = false;
-    this.#grantFloor();
+    if (schedule) this.#grantFloor();
   }
 
   /** Waits out rate limits instead of failing; retries never count as calls. */
-  async *#generate(who: string, request: ModelRequest): AsyncIterable<string> {
+  async *#generate(
+    who: string,
+    request: ModelRequest | (() => ModelRequest),
+    current: () => boolean = () => true,
+  ): AsyncIterable<string> {
     for (let attempt = 1; ; attempt += 1) {
       let started = false;
       try {
         // Gate and start atomically: another draft exhausting the budget must
         // not strand a reservation before its provider request even starts.
         while (true) {
-          if (this.#mode !== 'running' || this.#pendingQuestion) {
-            await this.#waitRunning();
+          if (!current()) return;
+          if (
+            this.#mode !== 'running' ||
+            this.#pendingQuestion ||
+            this.#yielding
+          ) {
+            await this.#until(
+              () =>
+                !current() ||
+                (this.#mode === 'running' &&
+                  !this.#pendingQuestion &&
+                  !this.#yielding),
+            );
+            this.#shutdown.signal.throwIfAborted();
             continue;
           }
           this.#shutdown.signal.throwIfAborted();
@@ -941,7 +1065,7 @@ export class Orchestrator {
           queueMicrotask(() => this.#changed());
         }
         for await (const chunk of this.#provider.generate({
-          ...request,
+          ...(typeof request === 'function' ? request() : request),
           signal: this.#shutdown.signal,
         })) {
           this.#shutdown.signal.throwIfAborted();
@@ -980,7 +1104,8 @@ export class Orchestrator {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#shutdown.abort();
-    for (const waiter of this.#floorQueue.splice(0)) waiter.wake('drop');
+    for (const entry of [...this.#floorQueue])
+      this.#removeQueued(entry, 'drop');
     this.#speaking = undefined;
     this.#changed();
   }
@@ -996,18 +1121,6 @@ export class Orchestrator {
       };
       this.#conditions.add(check);
     });
-  }
-
-  #quietest(): AgentDefinition {
-    const candidates = this.#agents.filter((agent) =>
-      this.#takesPart(agent.id),
-    );
-    const [quietest] = candidates.sort(
-      (a, b) =>
-        (this.#lastSpoke.get(a.id) ?? -1) - (this.#lastSpoke.get(b.id) ?? -1),
-    );
-    if (!quietest) throw new Error('The room has no agents.');
-    return quietest;
   }
 
   #setMode(mode: RoomMode): void {

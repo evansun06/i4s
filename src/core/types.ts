@@ -12,7 +12,7 @@ export type AgentActivity =
   | 'deliberating'
   /** Has a finished draft and is waiting for the floor. */
   | 'waiting'
-  /** Holds the floor; checking its draft against what it missed. */
+  /** Checking a queued contribution against new messages; reviews may run together. */
   | 'reviewing'
   | 'speaking'
   /** Holding a question for the user, or waiting for the user's answer. */

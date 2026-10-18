@@ -2,6 +2,7 @@ import { agentIds, identities } from '../agents/identity.js';
 import type { Orchestrator } from '../core/orchestrator.js';
 import type { AgentId, RoomSnapshot } from '../core/types.js';
 import { helpText, parseCommand } from './commands.js';
+import { messageText } from './message-text.js';
 import { Pacer, type Utterance } from './pacer.js';
 
 export interface ChatMessage {
@@ -44,10 +45,15 @@ export class ChatController {
   #key = 0;
   #active: ChatMessage | undefined;
   #stream:
-    { agent: AgentId; message: ChatMessage; utterance: Utterance } | undefined;
+    | {
+        agent: AgentId;
+        message: ChatMessage;
+        utterance: Utterance;
+        raw: string;
+      }
+    | undefined;
   #snapshot: PresentationSnapshot | undefined;
   #notice: string | undefined;
-  #lastTurn: RoomSnapshot['lastTurn'];
   #drainScheduled = false;
   readonly #playback = new Set<ChatMessage>();
 
@@ -63,11 +69,15 @@ export class ChatController {
       wordsPerMinute: options.wordsPerMinute,
       pauseBetweenSpeakersMs: options.wordsPerMinute ? 1000 : 0,
     });
+    engine.setDisplayGate(() => this.#pacer.idle());
     for (const event of engine.bus.log) {
       this.#messages.push({
         key: this.#key++,
         speaker: event.kind === 'user-message' ? 'user' : event.agent,
-        text: event.text,
+        text:
+          event.kind === 'agent-message'
+            ? messageText(event.text, true)
+            : event.text,
         eventId: event.id,
         complete: true,
       });
@@ -135,15 +145,6 @@ export class ChatController {
     else this.#finishStream();
     if (room.notice && room.notice !== this.#notice) this.#system(room.notice);
     this.#notice = room.notice;
-    if (
-      room.lastTurn !== this.#lastTurn &&
-      room.lastTurn?.result === 'withdrew'
-    ) {
-      this.#system(
-        `${identities[room.lastTurn.agent].name} withdrew a reply already covered.`,
-      );
-    }
-    this.#lastTurn = room.lastTurn;
     this.#changed();
     this.#scheduleDrain();
   }
@@ -177,15 +178,17 @@ export class ChatController {
           this.#scheduleDrain();
         },
       });
-      this.#stream = { agent, message, utterance };
+      this.#stream = { agent, message, utterance, raw: text };
     }
-    this.#stream.utterance.update(text);
+    this.#stream.raw = text;
+    this.#stream.utterance.update(messageText(text));
   }
 
   #finishStream(): void {
     if (!this.#stream) return;
     if (this.#stream.message.eventId === undefined)
       this.#stream.message.failed = true;
+    this.#stream.utterance.update(messageText(this.#stream.raw, true));
     this.#stream.utterance.finish();
     this.#stream = undefined;
   }
@@ -198,6 +201,11 @@ export class ChatController {
       complete: true,
     });
     this.#changed();
+  }
+
+  /** Reserve the next turn without submitting or changing the editor. */
+  raiseHand(): boolean {
+    return !this.#closing && this.engine.raiseHand();
   }
 
   /** Returns true only for /quit; the caller owns terminal teardown. */
@@ -268,6 +276,7 @@ export class ChatController {
           ...(question && { questionId: question.eventId }),
           ...(command.deep && { deep: command.deep }),
         });
+        this.engine.raiseHand();
         break;
       }
     }
@@ -290,19 +299,22 @@ export class ChatController {
     const room = this.engine.snapshot();
     if (room.mode !== 'initial-prompt' && room.mode !== 'awaiting-user') return;
     const pending = room.pendingQuestion;
-    const index = pending
+    const answerIndex = pending
       ? this.#queue.findIndex((item) => item.questionId === pending.eventId)
-      : 0;
+      : -1;
+    const index = answerIndex >= 0 ? answerIndex : 0;
     if (index < 0 || !this.#queue[index]) return;
     const item = this.#queue.splice(index, 1)[0]!;
     this.#batch = true;
     this.#pacer.newRound();
     this.#changed();
     try {
-      await this.engine.submit(item.text, {
+      const exchange = this.engine.submit(item.text, {
         answer: item.answer && item.questionId === pending?.eventId,
         ...(item.deep && { deep: item.deep }),
       });
+      if (this.#queue.length) this.engine.raiseHand();
+      await exchange;
       if (!this.#closing) await this.#persist();
     } catch (error) {
       if (!this.#closing)
