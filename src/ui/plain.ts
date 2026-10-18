@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import type { Orchestrator } from '../core/orchestrator.js';
 import type { AgentDefinition, AgentId, RoomSnapshot } from '../core/types.js';
+import { Pacer, type Utterance } from './pacer.js';
 
 const COLORS: Record<AgentId, string> = {
   red: '\x1b[31m',
@@ -19,7 +20,11 @@ const RESET = '\x1b[0m';
 export async function runPlain(
   orchestrator: Orchestrator,
   agents: readonly AgentDefinition[],
-  options: { readonly afterRound?: () => Promise<void> } = {},
+  options: {
+    readonly afterRound?: () => Promise<void>;
+    /** Display speed for replies; 0 shows them as fast as they arrive. */
+    readonly wordsPerMinute?: number;
+  } = {},
 ): Promise<void> {
   const out = process.stdout;
   const terminal = createInterface({ input: process.stdin, output: out });
@@ -31,43 +36,29 @@ export async function runPlain(
     agents.find((agent) => agent.id === id)?.name ?? id;
   const name = (id: AgentId) => `${COLORS[id]}${agentName(id)}${RESET}`;
 
-  // Status lines wait until the current speaker finishes.
-  let held: string[] = [];
-  let speaker: AgentId | undefined;
-  let printed = 0;
+  // Replies and status lines appear in order, at reading speed.
+  const wordsPerMinute = options.wordsPerMinute ?? 340;
+  const pacer = new Pacer((text) => out.write(text), {
+    wordsPerMinute,
+    pauseBetweenSpeakersMs: wordsPerMinute ? 1000 : 0,
+  });
+  const status = (line: string) => pacer.line(`${DIM}  · ${line}${RESET}\n`);
+  let current: { agent: AgentId; utterance: Utterance } | undefined;
   let askingForBudget = false;
-  const status = (line: string) => {
-    if (speaker) held.push(line);
-    else out.write(`${DIM}  · ${line}${RESET}\n`);
-  };
 
   let previous: RoomSnapshot = orchestrator.snapshot();
   orchestrator.subscribe(() => {
     const next = orchestrator.snapshot();
 
-    if (next.speaking) {
-      if (speaker !== next.speaking.agent) {
-        speaker = next.speaking.agent;
-        printed = 0;
-        out.write(`\n${name(speaker)}: `);
-      }
-      out.write(next.speaking.text.slice(printed));
-      printed = next.speaking.text.length;
-    } else if (speaker) {
-      out.write('\n\n');
-      speaker = undefined;
-      const lines = held;
-      held = [];
-      lines.forEach(status);
+    if (next.speaking?.agent !== current?.agent) {
+      current?.utterance.finish();
+      current = next.speaking && {
+        agent: next.speaking.agent,
+        utterance: pacer.speech(`\n${name(next.speaking.agent)}: `),
+      };
     }
+    if (next.speaking) current?.utterance.update(next.speaking.text);
 
-    for (const { id } of agents) {
-      const before = previous.agents[id].activity;
-      const now = next.agents[id].activity;
-      if (now === 'reviewing' && before !== 'reviewing') {
-        status(`${agentName(id)} is catching up on what was said`);
-      }
-    }
     const turn = next.lastTurn;
     if (turn && turn !== previous.lastTurn && turn.result === 'withdrew') {
       status(`${agentName(turn.agent)} dropped their reply; already covered`);
@@ -162,6 +153,7 @@ export async function runPlain(
       const text = moveOn ? input.replace(/^\/new\b\s*/i, '') : input;
       if (!text) continue;
 
+      pacer.newRound();
       const round = orchestrator.submit(text, { answer: !moveOn });
       const { mentioned } = orchestrator.snapshot();
       status(
@@ -177,6 +169,8 @@ export async function runPlain(
           `Could not save this discussion: ${error instanceof Error ? error.message : 'unknown error'}`,
         );
       }
+      // Let the last reply finish showing before prompting again.
+      await pacer.idle();
       const { callsUsed, callLimit } = orchestrator.snapshot();
       out.write(`${DIM}  [${callsUsed}/${callLimit} calls used]${RESET}\n\n`);
       showQuestion();

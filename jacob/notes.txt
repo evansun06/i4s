@@ -1,23 +1,11 @@
 HIGH:
-allow option to @ specific colours to only get their specific output, but still have other colours listening so they don't lose track of the convo
-    - will require update to prompt to not hold floor for too long unless explcitly mentioned/wanted
+agents sound too robotic, needs to more natural and conversatinoal
+make output speed slower, add a fake delay/thinking
+
 
 LOW:
 require better api key verification and unfcitonality testing
 Only has support for gemeni, cahtgpt, claude
-
-agents sound too robotic, needs to more natural and conversatinoal
-make output speed slower, add a fake delay/thinking
-make messages shorter
-
-
-ISSUES:
-- current implementation has agents pops out when its turn comes, not when the moment it gets covered, meaning we will see agent raising hand and then putting it down.
-    - Fix is to add a cheap bacthed check after each message of "which queued intentions got answered?", a single call for all queued agents
-- Update agent prompts, really knock down the behaviour
-
-
-- No @mentions to pick who speaks.
 
 
 
