@@ -10,6 +10,35 @@ import {
   loadSettings,
   saveSettings,
 } from '../storage/credentials.js';
+import { listSessions, type Session } from '../storage/sessions.js';
+
+const RECENT_SESSIONS = 15;
+
+/** Offers recent discussions to continue; undefined means start a new one. */
+export async function chooseSession(): Promise<Session | undefined> {
+  const sessions = (await listSessions()).slice(0, RECENT_SESSIONS);
+  if (!sessions.length) return undefined;
+  const choice = await select<string>({
+    message: 'Start a new discussion or continue one?',
+    choices: [
+      { name: 'New discussion', value: '' },
+      ...sessions.map((session) => ({
+        name: `${session.title}  (${when(session.updatedAt)}, ${session.discussion.log.length} messages)`,
+        value: session.id,
+      })),
+    ],
+  });
+  return sessions.find((session) => session.id === choice);
+}
+
+function when(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 export interface ChosenProvider {
   readonly provider: ProviderId;

@@ -20,6 +20,7 @@ import type {
   AgentDefinition,
   AgentId,
   AgentState,
+  LogEvent,
   RoomMode,
   RoomSnapshot,
   TurnResult,
@@ -40,6 +41,16 @@ export interface OrchestratorOptions {
   readonly compactAtTokens?: number;
   /** Rounds kept word for word after condensing, by size. */
   readonly keepTokens?: number;
+  /** A discussion saved with `save()`, to continue where it left off. */
+  readonly restore?: SavedDiscussion;
+}
+
+/** Everything needed to continue a discussion later; plain JSON data. */
+export interface SavedDiscussion {
+  readonly log: readonly LogEvent[];
+  readonly summary: string;
+  readonly foldedUpTo: number;
+  readonly pendingQuestion?: RoomSnapshot['pendingQuestion'];
 }
 
 // A ceiling, not a target: thinking models spend part of it before answering.
@@ -58,7 +69,7 @@ const MAX_RETRY_SECONDS = 60;
  * Agents never carry on a discussion without the user.
  */
 export class Orchestrator {
-  readonly bus = new EventBus();
+  readonly bus: EventBus;
   readonly #agents: readonly AgentDefinition[];
   readonly #provider: ModelProvider;
   readonly #listeners = new Set<() => void>();
@@ -103,6 +114,35 @@ export class Orchestrator {
     for (const agent of this.#agents) {
       this.#agentStates.set(agent.id, { activity: 'listening' });
     }
+
+    const saved = options.restore;
+    this.bus = new EventBus(saved?.log);
+    if (!saved?.log.length) return;
+    this.#summary = saved.summary;
+    this.#foldedUpTo = saved.foldedUpTo;
+    this.#mode = 'awaiting-user';
+    for (const event of this.bus.log) {
+      if (event.kind === 'agent-message')
+        this.#lastSpoke.set(event.agent, event.id);
+      else this.#roundStartedAt = event.id;
+    }
+    // Drafts held for an answer are not saved; agents redraft after it.
+    if (saved.pendingQuestion) {
+      this.#pendingQuestion = saved.pendingQuestion;
+      this.#agentStates.set(saved.pendingQuestion.agent, {
+        activity: 'has-question',
+      });
+    }
+  }
+
+  /** The discussion so far, for storage. Call between rounds. */
+  save(): SavedDiscussion {
+    return {
+      log: [...this.bus.log],
+      summary: this.#summary,
+      foldedUpTo: this.#foldedUpTo,
+      ...(this.#pendingQuestion && { pendingQuestion: this.#pendingQuestion }),
+    };
   }
 
   /** Cached until the next change, so React can use it as an external store. */

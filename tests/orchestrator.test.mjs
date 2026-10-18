@@ -440,3 +440,77 @@ test('an instant answer still lets the asker and late passers reply', async () =
     ['blue', 'green', 'red', 'yellow'],
   );
 });
+
+test('a saved discussion continues where it left off', async () => {
+  const { orchestrator } = room((kind, agent) =>
+    agent === 'red' ? 'SPEAK\nPick a city.\nQUESTION: Which city?' : 'PASS',
+  );
+  await orchestrator.submit('Plan my launch');
+  // Through JSON, as it would be stored on disk.
+  const saved = JSON.parse(JSON.stringify(orchestrator.save()));
+
+  const provider = fakeProvider((kind, agent) =>
+    agent === 'red' ? 'SPEAK\nAustin it is.' : 'PASS',
+  );
+  const resumed = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit: 50,
+    restore: saved,
+  });
+  assert.equal(resumed.snapshot().mode, 'awaiting-user');
+  assert.equal(resumed.snapshot().pendingQuestion.agent, 'red');
+  assert.equal(resumed.agentState('red').activity, 'has-question');
+
+  await resumed.submit('Austin');
+  assert.equal(resumed.bus.log[2].replyTo, 1);
+  assert.match(
+    provider.calls[0].prompt,
+    /USER: Plan my launch[\s\S]*USER: Austin/,
+  );
+  assert.deepEqual(said(resumed), [
+    'red: Pick a city.\nQUESTION: Which city?',
+    'red: Austin it is.',
+  ]);
+});
+
+test('sessions are saved, listed newest first, and bad files are skipped', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { saveSession, listSessions, titleFor } =
+    await import('../dist/storage/sessions.js');
+  const dir = await mkdtemp(join(tmpdir(), 'i4s-sessions-'));
+  try {
+    const discussion = {
+      log: [{ kind: 'user-message', text: 'Plan my coffee launch', id: 0 }],
+      summary: '',
+      foldedUpTo: 0,
+    };
+    const base = {
+      version: 1,
+      title: titleFor(discussion),
+      createdAt: '2026-10-01T00:00:00Z',
+      discussion,
+    };
+    await saveSession(
+      { ...base, id: 'older', updatedAt: '2026-10-01T00:00:00Z' },
+      dir,
+    );
+    await saveSession(
+      { ...base, id: 'newer', updatedAt: '2026-10-02T00:00:00Z' },
+      dir,
+    );
+    await writeFile(join(dir, 'broken.json'), '{ not json');
+    await writeFile(join(dir, 'other.json'), JSON.stringify({ version: 1 }));
+
+    const sessions = await listSessions(dir);
+    assert.deepEqual(
+      sessions.map((s) => s.id),
+      ['newer', 'older'],
+    );
+    assert.equal(sessions[0].title, 'Plan my coffee launch');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
