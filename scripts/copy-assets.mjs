@@ -1,6 +1,10 @@
 import { copyFile, mkdir } from 'node:fs/promises';
 
-const files = ['pallette/idiots.gpl'];
+const files = [
+  'pallette/idiots.gpl',
+  'source/korg/korg.png',
+  'source/korg/korg.json',
+];
 for (const name of ['ruby', 'lemon', 'jade', 'bleu']) {
   for (const extension of ['png', 'json'])
     files.push(`source/agents/${name}.${extension}`);

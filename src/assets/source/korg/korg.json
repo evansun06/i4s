@@ -1,0 +1,169 @@
+{
+  "frames": [
+    {
+      "filename": "korg #idle 0.aseprite",
+      "frame": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 500
+    },
+    {
+      "filename": "korg #idle 1.aseprite",
+      "frame": { "x": 16, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 500
+    },
+    {
+      "filename": "korg #idle 2.aseprite",
+      "frame": { "x": 32, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 500
+    },
+    {
+      "filename": "korg #idle 3.aseprite",
+      "frame": { "x": 48, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 4.aseprite",
+      "frame": { "x": 64, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 5.aseprite",
+      "frame": { "x": 80, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 6.aseprite",
+      "frame": { "x": 96, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 7.aseprite",
+      "frame": { "x": 112, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 8.aseprite",
+      "frame": { "x": 128, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 9.aseprite",
+      "frame": { "x": 144, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 10.aseprite",
+      "frame": { "x": 160, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 11.aseprite",
+      "frame": { "x": 176, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 12.aseprite",
+      "frame": { "x": 192, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 13.aseprite",
+      "frame": { "x": 208, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 50
+    },
+    {
+      "filename": "korg #idle 14.aseprite",
+      "frame": { "x": 224, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 500
+    },
+    {
+      "filename": "korg #idle 15.aseprite",
+      "frame": { "x": 240, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 500
+    }
+  ],
+  "meta": {
+    "app": "https://www.aseprite.org/",
+    "version": "1.3.18.6-arm64",
+    "image": "korg.png",
+    "format": "RGBA8888",
+    "size": { "w": 256, "h": 16 },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "idle",
+        "from": 0,
+        "to": 15,
+        "direction": "forward",
+        "color": "#000000ff"
+      }
+    ],
+    "layers": [
+      { "name": "Sprite Sheet", "opacity": 255, "blendMode": "normal" }
+    ],
+    "slices": []
+  }
+}

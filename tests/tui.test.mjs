@@ -719,3 +719,67 @@ test('mouse wheel reports scroll the chat and are never typed into the editor', 
   assert.equal(mouseWheel('[<0;10;5M'), 0); // a click: mouse noise, no scroll
   assert.equal(mouseWheel('hello'), undefined);
 });
+
+test('Korg loading frames honor asset timing and loop without a rest', async () => {
+  const { loadKorgSprites, loopingFrame } =
+    await import('../dist/ui/sprites.js');
+  const { idle } = loadKorgSprites();
+  assert.equal(idle.length, 16);
+  let elapsed = 0;
+  for (const frame of idle) {
+    assert.equal(frame.rows.length, 8);
+    assert.ok(frame.rows.every((row) => row.length === 16));
+    assert.equal(loopingFrame(idle, elapsed), frame);
+    assert.equal(loopingFrame(idle, elapsed + frame.duration - 1), frame);
+    elapsed += frame.duration;
+  }
+  assert.equal(loopingFrame(idle, elapsed), idle[0]);
+  assert.equal(loopingFrame(idle, elapsed + 500), idle[1]);
+});
+
+test('drawing centers Korg between two dimmed pairs and removes him when finished', async () => {
+  const React = await import('react');
+  const { renderToString } = await import('ink');
+  const { stripVTControlCharacters } = await import('node:util');
+  const { CharacterRow } = await import('../dist/ui/app.js');
+  const { controller } = fixture(() => 'PASS');
+  try {
+    const state = {
+      ...controller.snapshot(),
+      displaying: 'red',
+      drawing: { status: 'running', message: 'Working' },
+    };
+    const sprites = loadSprites();
+    const view = (compact, columns) =>
+      stripVTControlCharacters(
+        renderToString(
+          React.createElement(CharacterRow, {
+            state,
+            sprites,
+            compact,
+            tick: 0,
+          }),
+          { columns },
+        ),
+      );
+    assert.equal(floorAgent(state), undefined);
+    for (const [compact, columns] of [
+      [false, 100],
+      [true, 60],
+    ]) {
+      const output = view(compact, columns);
+      assert.equal((output.match(/paused/g) ?? []).length, 4);
+      assert.match(output, /drawing/);
+      assert.ok(output.includes('▀') || output.includes('▄'));
+      // Compact mode vertically centers the agent labels beside Korg's sprite.
+      if (!compact) assert.match(output, /Ruby.*Lemon.*Korg.*Jade.*Bleu/);
+    }
+    for (const status of ['ready', 'failed']) {
+      state.drawing = { status };
+      assert.doesNotMatch(view(false, 100), /Korg|drawing/);
+      assert.equal(floorAgent(state), 'red');
+    }
+  } finally {
+    await controller.close();
+  }
+});

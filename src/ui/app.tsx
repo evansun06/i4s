@@ -25,7 +25,13 @@ import type { ChatController, PresentationSnapshot } from './controller.js';
 import { edit, editorWindow, type EditorState } from './editor.js';
 import { DrawingLink } from './drawing.js';
 import { boldRuns } from './message-text.js';
-import { FloorAnimation, type SpriteAnimations } from './sprites.js';
+import {
+  FloorAnimation,
+  loadKorgSprites,
+  loopingFrame,
+  type SpriteAnimations,
+  type SpriteFrame,
+} from './sprites.js';
 import { dimAvatarColor, theme, visibleText } from './theme.js';
 
 export function activityLabel(
@@ -78,7 +84,65 @@ export function mouseWheel(input: string): number | undefined {
 }
 
 export function floorAgent(state: PresentationSnapshot): AgentId | undefined {
+  if (state.drawing?.status === 'running') return undefined;
   return state.displaying ?? state.question?.agent;
+}
+
+function Avatar({
+  frame,
+  dimmed = false,
+}: {
+  frame: SpriteFrame;
+  dimmed?: boolean;
+}) {
+  return (
+    <Box flexDirection="column" aria-hidden>
+      {frame.rows.map((row, y) => (
+        <Text key={y}>
+          {row.map((cell, x) => (
+            <Text
+              key={x}
+              color={
+                dimmed
+                  ? dimAvatarColor(cell.foreground ?? theme.text)
+                  : (cell.foreground ?? theme.text)
+              }
+              backgroundColor={
+                dimmed
+                  ? dimAvatarColor(cell.background ?? theme.background)
+                  : (cell.background ?? theme.background)
+              }
+            >
+              {cell.glyph}
+            </Text>
+          ))}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+function Korg({
+  tick,
+  reducedMotion,
+}: {
+  tick: number;
+  reducedMotion: boolean;
+}) {
+  const [sprites] = useState(loadKorgSprites);
+  const [started] = useState(Date.now);
+  const frame = reducedMotion
+    ? sprites.idle[0]!
+    : loopingFrame(sprites.idle, tick - started);
+  return (
+    <Box width={16} flexShrink={0} flexDirection="column" alignItems="center">
+      <Avatar frame={frame} />
+      <Text color={theme.bright} bold>
+        Korg
+      </Text>
+      <Text color={theme.text}>drawing</Text>
+    </Box>
+  );
 }
 
 export function CharacterRow({
@@ -94,6 +158,7 @@ export function CharacterRow({
 }) {
   const reducedMotion =
     useIsScreenReaderEnabled() || process.env.NO_COLOR !== undefined;
+  const drawing = state.drawing?.status === 'running';
   const speaker = floorAgent(state);
   const clocks = useMemo(
     () =>
@@ -105,49 +170,33 @@ export function CharacterRow({
   return (
     <Box
       justifyContent="center"
-      columnGap={compact ? 1 : 3}
+      columnGap={drawing ? 0 : compact ? 1 : 3}
+      alignItems="center"
       rowGap={0}
       flexShrink={0}
-      flexWrap={compact ? 'wrap' : 'nowrap'}
+      flexWrap={compact && !drawing ? 'wrap' : 'nowrap'}
     >
-      {agentIds.map((id) => {
+      {(drawing
+        ? [...agentIds.slice(0, 2), 'korg' as const, ...agentIds.slice(2)]
+        : agentIds
+      ).map((id) => {
+        if (id === 'korg')
+          return <Korg key={id} tick={tick} reducedMotion={reducedMotion} />;
         const frame = clocks[id].frame(tick, speaker === id, reducedMotion);
         const colors = theme.agents[id];
-        const dimmed = speaker !== undefined && speaker !== id;
+        const dimmed = drawing || (speaker !== undefined && speaker !== id);
         return (
           <Box
             key={id}
-            width={compact ? 15 : 16}
+            width={drawing ? undefined : compact ? 15 : 16}
+            flexBasis={drawing ? 0 : undefined}
+            flexGrow={drawing ? 1 : 0}
+            maxWidth={drawing ? 16 : undefined}
+            minWidth={0}
             flexDirection="column"
             alignItems="center"
           >
-            {!compact && (
-              <Box flexDirection="column" aria-hidden>
-                {frame.rows.map((row, y) => (
-                  <Text key={y}>
-                    {row.map((cell, x) => (
-                      <Text
-                        key={x}
-                        color={
-                          dimmed
-                            ? dimAvatarColor(cell.foreground ?? theme.text)
-                            : (cell.foreground ?? theme.text)
-                        }
-                        backgroundColor={
-                          dimmed
-                            ? dimAvatarColor(
-                                cell.background ?? theme.background,
-                              )
-                            : (cell.background ?? theme.background)
-                        }
-                      >
-                        {cell.glyph}
-                      </Text>
-                    ))}
-                  </Text>
-                ))}
-              </Box>
-            )}
+            {!compact && <Avatar frame={frame} dimmed={dimmed} />}
             <Text
               color={dimmed ? dimAvatarColor(colors.light) : colors.light}
               bold
@@ -157,7 +206,16 @@ export function CharacterRow({
                 {id}
               </Text>
             </Text>
-            <Text color={state.displaying === id ? colors.glow : theme.text}>
+            <Text
+              color={
+                dimmed
+                  ? dimAvatarColor(theme.text)
+                  : state.displaying === id
+                    ? colors.glow
+                    : theme.text
+              }
+              wrap="truncate"
+            >
               {activityLabel(state, id)}
             </Text>
           </Box>
@@ -196,10 +254,14 @@ export function App({
   const closeStarted = useRef(false);
   const suggestions = dismissed ? [] : complete(editor.text, editor.cursor);
   const selection = Math.min(selected, Math.max(0, suggestions.length - 1));
-  const compact = columns < 76 || rows < 24;
-  const characterHeight = compact
-    ? Math.ceil(4 / Math.max(1, Math.floor((columns - 1) / 16))) * 2
-    : 10;
+  const compact =
+    columns < (state.drawing?.status === 'running' ? 82 : 76) || rows < 24;
+  const characterHeight =
+    state.drawing?.status === 'running'
+      ? 10
+      : compact
+        ? Math.ceil(4 / Math.max(1, Math.floor((columns - 1) / 16))) * 2
+        : 10;
   const suggestionCount = Math.max(0, Math.min(4, rows - characterHeight - 10));
   const suggestionStart = Math.max(0, selection - suggestionCount + 1);
   const visibleSuggestions = suggestions.slice(
@@ -234,9 +296,12 @@ export function App({
 
   useEffect(() => {
     if (reducedMotion) return;
-    const timer = setInterval(() => setTick(Date.now()), 100);
+    const timer = setInterval(
+      () => setTick(Date.now()),
+      state.drawing?.status === 'running' ? 50 : 100,
+    );
     return () => clearInterval(timer);
-  }, [reducedMotion]);
+  }, [reducedMotion, state.drawing?.status]);
   useEffect(() => {
     if (
       reducedMotion ||
