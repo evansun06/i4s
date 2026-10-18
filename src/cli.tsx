@@ -121,15 +121,37 @@ async function main() {
     });
   }
 
+  process.stdout.write(`Using ${preset.label} (${models.draft}).\n`);
+  const { chooseSession } = await import('./ui/setup.js');
+  const { newSessionId, saveSession, titleFor } =
+    await import('./storage/sessions.js');
+  const session = await chooseSession();
+
   const { Orchestrator } = await import('./core/orchestrator.js');
   const { panel } = await import('./agents/panel.js');
   const { runPlain } = await import('./ui/plain.js');
-  process.stdout.write(`Using ${preset.label} (${models.draft}).
-`);
-  await runPlain(
-    new Orchestrator({ agents: panel, provider, callLimit }),
-    panel,
-  );
+  const orchestrator = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit,
+    ...(session && { restore: session.discussion }),
+  });
+  const id = session?.id ?? newSessionId();
+  const createdAt = session?.createdAt ?? new Date().toISOString();
+  await runPlain(orchestrator, panel, {
+    // Saved after every round, so quitting at any prompt loses nothing.
+    afterRound: async () => {
+      const discussion = orchestrator.save();
+      await saveSession({
+        version: 1,
+        id,
+        title: session?.title ?? titleFor(discussion),
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        discussion,
+      });
+    },
+  });
 }
 
 main().catch((error: unknown) => {

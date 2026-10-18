@@ -2,7 +2,7 @@ import type { LogEvent } from '../core/types.js';
 
 export type ReplyAction = 'pass' | 'speak' | 'keep' | 'withdraw' | 'revise';
 
-const LENGTH = `in under 95 words. Go longer (up to 250 words) only if the user's latest message asks you or everyone to expand`;
+const LENGTH = `in under 50 words. Go longer (up to 250 words) only if the user's latest message asks you or everyone to expand`;
 const QUESTION_RULE = `Ask the user at most one question, and only if the answer would change your recommendation; otherwise state your assumption and keep going. To ask, end with one line starting "QUESTION:". The discussion stops until the user answers.`;
 const QUESTION_COOLDOWN = `The user was asked a question recently. Do not ask another; give your view with a stated assumption and let the user steer.`;
 

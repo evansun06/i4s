@@ -19,6 +19,7 @@ const RESET = '\x1b[0m';
 export async function runPlain(
   orchestrator: Orchestrator,
   agents: readonly AgentDefinition[],
+  options: { readonly afterRound?: () => Promise<void> } = {},
 ): Promise<void> {
   const out = process.stdout;
   const terminal = createInterface({ input: process.stdin, output: out });
@@ -97,7 +98,54 @@ export async function runPlain(
     orchestrator.resume();
   }
 
+  function showQuestion(): void {
+    const snapshot = orchestrator.snapshot();
+    const { pendingQuestion } = snapshot;
+    if (!pendingQuestion) return;
+    out.write(
+      `${BOLD}  ? QUESTION FROM ${agentName(pendingQuestion.agent)}: ${pendingQuestion.question}${RESET}\n`,
+    );
+    // Drafting or holding a draft: these agents continue after the answer.
+    const held = agents
+      .filter(({ id }) => id !== pendingQuestion.agent)
+      .filter(({ id }) =>
+        ['thinking', 'waiting', 'has-question'].includes(
+          snapshot.agents[id].activity,
+        ),
+      );
+    if (held.length) {
+      out.write(
+        `${DIM}  ${held.map((agent) => agent.name).join(', ')} will continue after your answer${RESET}\n`,
+      );
+    }
+    out.write(
+      `${DIM}  Answer it, or type /new and a message to move on and talk to everyone${RESET}\n\n`,
+    );
+  }
+
+  /** When continuing a discussion, replays the last few messages. */
+  function showRecap(): void {
+    const { log } = orchestrator.bus;
+    if (!log.length) return;
+    const recent = log.slice(-6);
+    if (log.length > recent.length) {
+      out.write(
+        `${DIM}  (${log.length - recent.length} earlier messages)${RESET}\n`,
+      );
+    }
+    for (const event of recent) {
+      const speaker =
+        event.kind === 'user-message'
+          ? `${BOLD}You${RESET}`
+          : name(event.agent);
+      out.write(`\n${speaker}: ${event.text}\n`);
+    }
+    out.write('\n');
+    showQuestion();
+  }
+
   out.write('\nWelcome to The Idiots! Type "exit" to quit.\n\n');
+  showRecap();
   try {
     while (true) {
       const asking = orchestrator.snapshot().pendingQuestion;
@@ -116,30 +164,16 @@ export async function runPlain(
 
       status('the panel is thinking');
       await orchestrator.submit(text, { answer: !moveOn });
-      const snapshot = orchestrator.snapshot();
-      const { callsUsed, callLimit, pendingQuestion } = snapshot;
-      out.write(`${DIM}  [${callsUsed}/${callLimit} calls used]${RESET}\n\n`);
-      if (pendingQuestion) {
-        out.write(
-          `${BOLD}  ? QUESTION FROM ${agentName(pendingQuestion.agent)}: ${pendingQuestion.question}${RESET}\n`,
-        );
-        // Drafting or holding a draft: these agents continue after the answer.
-        const held = agents
-          .filter(({ id }) => id !== pendingQuestion.agent)
-          .filter(({ id }) =>
-            ['thinking', 'waiting', 'has-question'].includes(
-              snapshot.agents[id].activity,
-            ),
-          );
-        if (held.length) {
-          out.write(
-            `${DIM}  ${held.map((agent) => agent.name).join(', ')} will continue after your answer${RESET}\n`,
-          );
-        }
-        out.write(
-          `${DIM}  Answer it, or type /new and a message to move on and talk to everyone${RESET}\n\n`,
+      try {
+        await options.afterRound?.();
+      } catch (error) {
+        status(
+          `Could not save this discussion: ${error instanceof Error ? error.message : 'unknown error'}`,
         );
       }
+      const { callsUsed, callLimit } = orchestrator.snapshot();
+      out.write(`${DIM}  [${callsUsed}/${callLimit} calls used]${RESET}\n\n`);
+      showQuestion();
     }
   } finally {
     terminal.close();
