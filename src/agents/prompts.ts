@@ -66,13 +66,23 @@ function render(context: DiscussionContext, markerAt?: number): string {
     : messages;
 }
 
+export interface DraftOptions {
+  /** No PASS allowed: the user must get a reply from this agent. */
+  readonly forced: boolean;
+  /** Names the user @mentioned; only they reply this round. */
+  readonly addressed: readonly string[];
+}
+
 export function draftPrompt(
   context: DiscussionContext,
-  forced: boolean,
+  { forced, addressed }: DraftOptions,
 ): string {
+  const who = addressed.length
+    ? `The user addressed ${addressed.join(' and ')} directly; only ${addressed.length > 1 ? 'they reply' : 'you reply'} this round, so answer them.`
+    : 'The other agents are replying too.';
   return `${render(context)}
 
-Reply to the user's latest message from your perspective. The other agents are replying too.
+Reply to the user's latest message from your perspective. ${who}
 ${forced ? '' : `Passing is normal and expected. Reply with only PASS if you have nothing notable to add, if you already made your points in earlier rounds, or if the latest message is outside your perspective. Stay quiet until something raised touches what you care about.\n`}Put SPEAK on the first line, then your reply ${LENGTH}.
 ${questionRule(context)}
 If one of your earlier questions is marked "not answered yet", the user chose to move on; do not repeat it unless it has become essential.`;
@@ -135,6 +145,19 @@ export function parseReply(
   if (header.startsWith('SPEAK')) return { action: 'speak', body: rest };
   if (header.startsWith('REVISE')) return { action: 'revise', body: rest };
   return { action: 'speak', body: raw.trim() };
+}
+
+/** Agents named with @, such as "@blue" or "@Red", in order of first mention. */
+export function findMentions<Id extends string>(
+  text: string,
+  ids: readonly Id[],
+): Id[] {
+  const found: Id[] = [];
+  for (const [, name = ''] of text.matchAll(/@(\w+)/g)) {
+    const id = ids.find((candidate) => candidate === name.toLowerCase());
+    if (id && !found.includes(id)) found.push(id);
+  }
+  return found;
 }
 
 export function findQuestion(text: string): string | undefined {

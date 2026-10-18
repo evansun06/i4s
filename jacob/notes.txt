@@ -18,8 +18,6 @@ ISSUES:
 
 
 - No @mentions to pick who speaks.
-- Nothing is saved. Exiting loses the session, and each call resends the whole transcript, so very long sessions get slower and more expensive.
-- Requires some sort of storage, since currently no session saving
 
 
 
@@ -27,18 +25,4 @@ ISSUES:
 - Research fixes what the agent knows about the world, or how hard it thinks. We don't have this. Every turn uses low reasoning effort, a capped reply length, and no web access. So an in-depth request gets the same treatment as a simple one, and agents can only use what the model already knows.
 
 If you only care about talking and listening right now, the current version is enough, and research can wait. When you want it, the cheap first step is the "deep" bid I described. An agent that flags its point as deep gets a turn with higher effort and a bigger budget, and nothing else changes.
-
-
-
-
-avoid chains of question in AI prompts !!!!!
-    - Specific, agents should be aware of current conversation direction, ie if there are chains of questions, no more questions, etc. 
-add option to skip questions/back to general discussion
-give each agent their own distinct voice, less is more, pointing out the main idea of thier persona to avoid overlap
-- Add "disagree/questioning" of fellow agents -> rn too agreeable
-limit 
-
-!!!!! does log summarization alter whole log? cause then ryan wouldn't have the ideal logs
-!!! also still can't continue prev convos. 
-
 

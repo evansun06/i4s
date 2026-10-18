@@ -1,5 +1,6 @@
 import {
   draftPrompt,
+  findMentions,
   findQuestion,
   parseReply,
   reviewPrompt,
@@ -59,6 +60,9 @@ const SUMMARY_TOKENS = 4096;
 const MAX_ATTEMPTS = 4;
 const MAX_RETRY_SECONDS = 60;
 
+/** Granted the floor, sent back to redraft, or dropped for this round. */
+type FloorTurn = 'granted' | 'redraft' | 'drop';
+
 /**
  * Runs one round per user message. Every agent drafts a reply at once; the
  * first with something to say speaks live. The rest wait for the floor and
@@ -82,8 +86,10 @@ export class Orchestrator {
   readonly #active = new Set<AgentId>();
   readonly #floorQueue: {
     agent: AgentId;
-    wake: (granted: boolean) => void;
+    wake: (turn: FloorTurn) => void;
   }[] = [];
+  /** Agents @mentioned this round; empty means everyone takes part. */
+  #mentioned: readonly AgentId[] = [];
   #floorBusy = false;
   /** Drafts that never saw this log entry are dropped and redrafted. */
   #discardBefore = -1;
@@ -154,6 +160,7 @@ export class Orchestrator {
         AgentState
       >,
       queue: this.#floorQueue.map((waiter) => waiter.agent),
+      mentioned: this.#mentioned,
       callsUsed: this.#callsUsed,
       callLimit: this.#callLimit,
       ...(this.#speaking && { speaking: this.#speaking }),
@@ -189,6 +196,9 @@ export class Orchestrator {
    * `{ answer: false }` the user sets the question aside instead: it stays
    * unanswered in the log, held drafts are dropped, and every agent replies
    * to this message afresh.
+   *
+   * "@blue" or "@red @green" in the message limits this round's replies to
+   * those agents. The rest make no calls and simply read the log next round.
    */
   async submit(
     text: string,
@@ -208,9 +218,17 @@ export class Orchestrator {
       ...(answering && { replyTo: pending.eventId }),
     });
     this.#roundStartedAt = event.id;
-    if (pending && !answering) {
-      this.#discardBefore = event.id;
-      for (const waiter of this.#floorQueue.splice(0)) waiter.wake(false);
+    this.#mentioned = findMentions(
+      text,
+      this.#agents.map((agent) => agent.id),
+    );
+    if (pending && !answering) this.#discardBefore = event.id;
+    // Held drafts: excluded agents drop theirs; after a set-aside question,
+    // everyone else redrafts.
+    for (const waiter of this.#floorQueue.splice(0)) {
+      if (!this.#takesPart(waiter.agent)) waiter.wake('drop');
+      else if (pending && !answering) waiter.wake('redraft');
+      else this.#floorQueue.push(waiter);
     }
     this.#setMode('running');
     // Drafts held over from before the question go first.
@@ -220,7 +238,10 @@ export class Orchestrator {
 
   async #runRound(): Promise<void> {
     for (const agent of this.#agents) {
-      if (!this.#active.has(agent.id)) this.#start(agent, false);
+      if (this.#takesPart(agent.id) && !this.#active.has(agent.id)) {
+        // An agent the user addressed by name does not get to pass.
+        this.#start(agent, this.#mentioned.includes(agent.id));
+      }
     }
     // After a question, also wait for the asker to finish, so it is free to
     // reply in the very next round.
@@ -239,6 +260,10 @@ export class Orchestrator {
 
     if (this.#mode === 'paused') this.#resumeTo = 'awaiting-user';
     else this.#setMode('awaiting-user');
+  }
+
+  #takesPart(agent: AgentId): boolean {
+    return !this.#mentioned.length || this.#mentioned.includes(agent);
   }
 
   pause(): void {
@@ -290,7 +315,12 @@ export class Orchestrator {
       for await (const chunk of this.#generate(agent.name, {
         kind: 'draft',
         system: agent.systemPrompt,
-        prompt: draftPrompt(this.#context(), forced),
+        prompt: draftPrompt(this.#context(), {
+          forced,
+          addressed: this.#mentioned.map(
+            (id) => this.#agents.find((other) => other.id === id)?.name ?? id,
+          ),
+        }),
         maxOutputTokens: REPLY_TOKENS,
       })) {
         raw += chunk;
@@ -309,6 +339,11 @@ export class Orchestrator {
     }
 
     const draft = parseReply(raw, true);
+    // Still drafting from before a round that left this agent out.
+    if (!this.#takesPart(agent.id)) {
+      this.#setAgent(agent.id, 'listening');
+      return 'done';
+    }
     if (!live && heardUpTo <= this.#discardBefore) return 'stale';
     const passed = draft?.action !== 'speak' || !draft.body;
     // A pass decided before the user's latest message is not a pass on it.
@@ -328,7 +363,12 @@ export class Orchestrator {
       agent.id,
       findQuestion(draft.body) ? 'has-question' : 'waiting',
     );
-    if (!(await this.#takeFloor(agent.id))) return 'stale';
+    const turn = await this.#takeFloor(agent.id);
+    if (turn === 'redraft') return 'stale';
+    if (turn === 'drop') {
+      this.#setAgent(agent.id, 'listening');
+      return 'done';
+    }
     try {
       if (this.bus.log.length === heardUpTo) this.#commit(agent.id, draft.body);
       else await this.#review(agent, draft.body, heardUpTo);
@@ -495,9 +535,9 @@ export class Orchestrator {
 
   /**
    * First come, first served; held while paused or awaiting an answer.
-   * Resolves false if the user moves on and the draft is dropped.
+   * The user's next message may instead send the draft back or drop it.
    */
-  #takeFloor(agent: AgentId): Promise<boolean> {
+  #takeFloor(agent: AgentId): Promise<FloorTurn> {
     return new Promise((wake) => {
       this.#floorQueue.push({ agent, wake });
       this.#changed();
@@ -513,7 +553,7 @@ export class Orchestrator {
     if (!next) return;
     this.#floorBusy = true;
     this.#changed();
-    next.wake(true);
+    next.wake('granted');
   }
 
   #releaseFloor(): void {
@@ -580,7 +620,10 @@ export class Orchestrator {
   }
 
   #quietest(): AgentDefinition {
-    const [quietest] = [...this.#agents].sort(
+    const candidates = this.#agents.filter((agent) =>
+      this.#takesPart(agent.id),
+    );
+    const [quietest] = candidates.sort(
       (a, b) =>
         (this.#lastSpoke.get(a.id) ?? -1) - (this.#lastSpoke.get(b.id) ?? -1),
     );

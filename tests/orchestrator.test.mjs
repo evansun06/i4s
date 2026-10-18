@@ -514,3 +514,58 @@ test('sessions are saved, listed newest first, and bad files are skipped', async
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('@mentions limit one round to those agents; the rest catch up next round', async () => {
+  const { provider, orchestrator } = room(
+    (kind, agent) => `SPEAK\n${agent} here`,
+  );
+  await orchestrator.submit('@Blue what are the risks? cc @red');
+
+  assert.deepEqual(orchestrator.snapshot().mentioned, ['blue', 'red']);
+  assert.deepEqual([...new Set(provider.calls.map((c) => c.agent))].sort(), [
+    'blue',
+    'red',
+  ]);
+  const draft = provider.calls.find(
+    (c) => c.agent === 'blue' && c.kind === 'draft',
+  );
+  assert.match(draft.prompt, /addressed BLUE and RED directly/);
+  // Addressed agents are not offered PASS.
+  assert.doesNotMatch(draft.prompt, /Reply with only PASS/);
+  assert.equal(orchestrator.agentState('green').activity, 'listening');
+
+  const before = provider.calls.length;
+  await orchestrator.submit('Thoughts, everyone?');
+  assert.deepEqual(orchestrator.snapshot().mentioned, []);
+  const green = provider.calls.slice(before).find((c) => c.agent === 'green');
+  // Green missed nothing: the mentioned round is in its prompt.
+  assert.match(green.prompt, /BLUE: blue here/);
+  assert.equal(
+    said(orchestrator).filter((s) => s.startsWith('green')).length,
+    1,
+  );
+});
+
+test('answering with an @mention drops other held drafts', async () => {
+  let round = 1;
+  const { provider, orchestrator } = room(async (kind, agent) => {
+    if (round === 2) return `SPEAK\n${agent} on $5k`;
+    await delay(agent === 'red' ? 1 : 5);
+    if (agent === 'red') return 'SPEAK\nQUESTION: Budget?';
+    return agent === 'blue' ? 'SPEAK\nHeld draft.' : 'PASS';
+  });
+  await orchestrator.submit('Plan my launch');
+  await delay(10);
+  assert.equal(orchestrator.agentState('blue').activity, 'waiting');
+
+  round = 2;
+  const before = provider.calls.length;
+  await orchestrator.submit('$5k, @red');
+  assert.equal(orchestrator.bus.log[2].replyTo, 1);
+  assert.deepEqual(
+    [...new Set(provider.calls.slice(before).map((c) => c.agent))],
+    ['red'],
+  );
+  assert.deepEqual(said(orchestrator).slice(1), ['red: red on $5k']);
+  assert.equal(orchestrator.agentState('blue').activity, 'listening');
+});

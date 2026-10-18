@@ -162,8 +162,14 @@ export async function runPlain(
       const text = moveOn ? input.replace(/^\/new\b\s*/i, '') : input;
       if (!text) continue;
 
-      status('the panel is thinking');
-      await orchestrator.submit(text, { answer: !moveOn });
+      const round = orchestrator.submit(text, { answer: !moveOn });
+      const { mentioned } = orchestrator.snapshot();
+      status(
+        mentioned.length
+          ? `${mentioned.map(agentName).join(' and ')} replying; the others are listening`
+          : 'the panel is thinking',
+      );
+      await round;
       try {
         await options.afterRound?.();
       } catch (error) {
