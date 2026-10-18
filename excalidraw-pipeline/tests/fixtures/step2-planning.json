@@ -1,0 +1,1201 @@
+{
+  "planningGraphs": {
+    "schemaVersion": "1.0",
+    "conversationId": "conversation-23c93077d648565a",
+    "knowledgeSnapshotSequence": 13,
+    "decisionGraph": {
+      "nodes": [
+        {
+          "id": "decision-backup-command",
+          "title": "Include a backup command",
+          "description": "Determine whether to include a backup command in the tool.",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "annotations": [],
+          "nodeType": "decision",
+          "primaryObjectId": "decision-backup-command"
+        },
+        {
+          "id": "decision-barcode-scanning",
+          "title": "Barcode scanning in the MVP",
+          "description": "Determine whether barcode scanning is included in the MVP.",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "annotations": [],
+          "nodeType": "decision",
+          "primaryObjectId": "decision-barcode-scanning"
+        },
+        {
+          "id": "decision-interface",
+          "title": "MVP user interface",
+          "description": "Choose the interface for the local volunteer tool.",
+          "justifiedByObjectIds": [
+            "constraint-team-budget-schedule",
+            "context-shared-offline-laptop",
+            "goal-local-book-swap-tool"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-green-interface-question",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "decision",
+          "primaryObjectId": "decision-interface"
+        },
+        {
+          "id": "decision-storage",
+          "title": "MVP storage approach",
+          "description": "Choose how the MVP stores book and reservation data.",
+          "justifiedByObjectIds": [
+            "constraint-team-budget-schedule",
+            "goal-local-book-swap-tool"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-storage-question",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "decision",
+          "primaryObjectId": "decision-storage"
+        },
+        {
+          "id": "group-mvp-choices",
+          "title": "MVP decisions",
+          "description": "Organizes decisions about the MVP interface, storage, barcode scanning, and backup command.",
+          "justifiedByObjectIds": [],
+          "annotations": [],
+          "nodeType": "group"
+        },
+        {
+          "id": "option-backup-command",
+          "title": "Backup command",
+          "description": "Provide a command to create a backup.",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-backup-location-unknown",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "option",
+          "primaryObjectId": "proposal-backup-command"
+        },
+        {
+          "id": "option-barcode-scanning",
+          "title": "Barcode scanning",
+          "description": "Add barcode scanning as a convenience feature.",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "ann-yellow-barcode-alternative",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "option",
+          "primaryObjectId": "proposal-barcode-scanning"
+        },
+        {
+          "id": "option-csv-storage",
+          "title": "CSV storage",
+          "description": "Store the book and reservation information using CSV.",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-csv-risk",
+              "association": "direct",
+              "viaObjectIds": []
+            },
+            {
+              "annotationId": "ann-red-csv-support",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "option",
+          "primaryObjectId": "proposal-csv-storage"
+        },
+        {
+          "id": "option-local-browser-ui",
+          "title": "Local browser UI",
+          "description": "Use a local browser interface instead of a terminal app.",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "ann-yellow-browser-catalog",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "option",
+          "primaryObjectId": "proposal-local-browser-ui"
+        },
+        {
+          "id": "option-sqlite-storage",
+          "title": "SQLite storage",
+          "description": "Use SQLite for book and reservation storage, prioritizing consistent reservation updates.",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-sqlite-conditional-test",
+              "association": "direct",
+              "viaObjectIds": []
+            },
+            {
+              "annotationId": "ann-blue-sqlite-consistency",
+              "association": "direct",
+              "viaObjectIds": []
+            },
+            {
+              "annotationId": "ann-red-revised-sqlite",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "option",
+          "primaryObjectId": "proposal-sqlite-storage"
+        },
+        {
+          "id": "option-terminal-app",
+          "title": "Terminal app",
+          "description": "Use a terminal application as the MVP interface.",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "ann-red-terminal-practical",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "option",
+          "primaryObjectId": "proposal-terminal-app"
+        }
+      ],
+      "edges": [
+        {
+          "id": "backup-has-option-command",
+          "sourceNodeId": "decision-backup-command",
+          "targetNodeId": "option-backup-command",
+          "justifiedByObjectIds": [],
+          "origin": "knowledge_derived",
+          "relation": "has_option"
+        },
+        {
+          "id": "barcode-has-option-scanning",
+          "sourceNodeId": "decision-barcode-scanning",
+          "targetNodeId": "option-barcode-scanning",
+          "justifiedByObjectIds": [],
+          "origin": "knowledge_derived",
+          "relation": "has_option"
+        },
+        {
+          "id": "contains-mvp-backup",
+          "sourceNodeId": "group-mvp-choices",
+          "targetNodeId": "decision-backup-command",
+          "justifiedByObjectIds": [],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "contains-mvp-barcode",
+          "sourceNodeId": "group-mvp-choices",
+          "targetNodeId": "decision-barcode-scanning",
+          "justifiedByObjectIds": [],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "contains-mvp-interface",
+          "sourceNodeId": "group-mvp-choices",
+          "targetNodeId": "decision-interface",
+          "justifiedByObjectIds": [],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "contains-mvp-storage",
+          "sourceNodeId": "group-mvp-choices",
+          "targetNodeId": "decision-storage",
+          "justifiedByObjectIds": [],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "interface-has-option-browser",
+          "sourceNodeId": "decision-interface",
+          "targetNodeId": "option-local-browser-ui",
+          "justifiedByObjectIds": [],
+          "origin": "knowledge_derived",
+          "relation": "has_option"
+        },
+        {
+          "id": "interface-has-option-terminal",
+          "sourceNodeId": "decision-interface",
+          "targetNodeId": "option-terminal-app",
+          "justifiedByObjectIds": [],
+          "origin": "knowledge_derived",
+          "relation": "has_option"
+        },
+        {
+          "id": "storage-has-option-csv",
+          "sourceNodeId": "decision-storage",
+          "targetNodeId": "option-csv-storage",
+          "justifiedByObjectIds": [],
+          "origin": "knowledge_derived",
+          "relation": "has_option"
+        },
+        {
+          "id": "storage-has-option-sqlite",
+          "sourceNodeId": "decision-storage",
+          "targetNodeId": "option-sqlite-storage",
+          "justifiedByObjectIds": [],
+          "origin": "knowledge_derived",
+          "relation": "has_option"
+        }
+      ]
+    },
+    "implementationGraph": {
+      "nodes": [
+        {
+          "id": "impl-backup-command",
+          "title": "Backup command",
+          "description": "Provide a command to create a backup; the backup destination remains undecided.",
+          "justifiedByObjectIds": [
+            "decision-backup-command",
+            "proposal-backup-command",
+            "question-backup-location",
+            "req-no-cloud-sync"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-backup-location-unknown",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "component",
+          "origin": "decision_derived",
+          "status": "confirmed",
+          "primaryObjectId": "proposal-backup-command"
+        },
+        {
+          "id": "impl-backup-location",
+          "title": "Backup destination",
+          "description": "Destination for backup files is not yet determined.",
+          "justifiedByObjectIds": [
+            "proposal-backup-command",
+            "question-backup-location",
+            "req-no-cloud-sync"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-backup-location-unknown",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-backup-command"]
+            }
+          ],
+          "nodeType": "technology",
+          "origin": "planner_derived",
+          "status": "undecided"
+        },
+        {
+          "id": "impl-barcode-deferred",
+          "title": "Barcode scanning deferred",
+          "description": "Barcode scanning is deferred until after the MVP and is not part of its implementation.",
+          "justifiedByObjectIds": [
+            "decision-barcode-scanning",
+            "proposal-barcode-scanning"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-yellow-barcode-alternative",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-barcode-scanning"]
+            }
+          ],
+          "nodeType": "milestone",
+          "origin": "conversation_explicit",
+          "status": "deferred",
+          "primaryObjectId": "decision-barcode-scanning"
+        },
+        {
+          "id": "impl-book-record",
+          "title": "Book record",
+          "description": "Book data includes title, author, and availability.",
+          "justifiedByObjectIds": ["decision-storage"],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-storage-question",
+              "association": "inherited",
+              "viaObjectIds": ["decision-storage"]
+            }
+          ],
+          "nodeType": "data_entity",
+          "origin": "conversation_explicit",
+          "status": "confirmed",
+          "primaryObjectId": "data-book-record"
+        },
+        {
+          "id": "impl-book-swap-workflow",
+          "title": "Donation and reservation workflow",
+          "description": "Record donations, list available books, and reserve a book.",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "annotations": [
+            {
+              "annotationId": "ann-red-workflow-commands",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "workflow",
+          "origin": "conversation_explicit",
+          "status": "proposed",
+          "primaryObjectId": "workflow-book-swap"
+        },
+        {
+          "id": "impl-data-storage-component",
+          "title": "Local data storage",
+          "description": "Local storage capability for book and reservation records using the selected SQLite technology.",
+          "justifiedByObjectIds": [
+            "decision-storage",
+            "proposal-sqlite-storage",
+            "req-no-cloud-sync"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-sqlite-conditional-test",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-sqlite-storage"]
+            },
+            {
+              "annotationId": "ann-blue-sqlite-consistency",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-sqlite-storage"]
+            },
+            {
+              "annotationId": "ann-blue-storage-question",
+              "association": "inherited",
+              "viaObjectIds": ["decision-storage"]
+            },
+            {
+              "annotationId": "ann-red-revised-sqlite",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-sqlite-storage"]
+            }
+          ],
+          "nodeType": "component",
+          "origin": "decision_derived",
+          "status": "confirmed"
+        },
+        {
+          "id": "impl-donation-task",
+          "title": "Record donated books",
+          "description": "Implement the donation-recording step of the workflow.",
+          "justifiedByObjectIds": [
+            "goal-local-book-swap-tool",
+            "workflow-book-swap"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-red-workflow-commands",
+              "association": "inherited",
+              "viaObjectIds": ["workflow-book-swap"]
+            }
+          ],
+          "nodeType": "task",
+          "origin": "planner_derived",
+          "status": "proposed"
+        },
+        {
+          "id": "impl-group-mvp",
+          "title": "Neighborhood book-swap MVP",
+          "description": "Organizes the local book-swap tool implementation.",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "annotations": [],
+          "nodeType": "group",
+          "origin": "planner_derived",
+          "status": "proposed"
+        },
+        {
+          "id": "impl-list-task",
+          "title": "List available books",
+          "description": "Implement listing of available books.",
+          "justifiedByObjectIds": ["data-book-record", "workflow-book-swap"],
+          "annotations": [
+            {
+              "annotationId": "ann-red-workflow-commands",
+              "association": "inherited",
+              "viaObjectIds": ["workflow-book-swap"]
+            }
+          ],
+          "nodeType": "task",
+          "origin": "planner_derived",
+          "status": "proposed"
+        },
+        {
+          "id": "impl-mvp-scope",
+          "title": "MVP scope constraints",
+          "description": "Respect the MVP exclusions and delivery limits: no accounts, payments, or cloud sync; two volunteers, $100, and four weeks.",
+          "justifiedByObjectIds": [
+            "constraint-team-budget-schedule",
+            "req-no-accounts-payments",
+            "req-no-cloud-sync"
+          ],
+          "annotations": [],
+          "nodeType": "group",
+          "origin": "planner_derived",
+          "status": "confirmed"
+        },
+        {
+          "id": "impl-reservation-record",
+          "title": "Reservation record",
+          "description": "A reservation associates a neighbor's name with a book; retention policy remains unresolved.",
+          "justifiedByObjectIds": [
+            "decision-storage",
+            "question-name-retention-policy"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-storage-question",
+              "association": "inherited",
+              "viaObjectIds": ["decision-storage"]
+            },
+            {
+              "annotationId": "ann-green-retention-concern",
+              "association": "inherited",
+              "viaObjectIds": ["question-name-retention-policy"]
+            }
+          ],
+          "nodeType": "data_entity",
+          "origin": "conversation_explicit",
+          "status": "confirmed",
+          "primaryObjectId": "data-reservation-record"
+        },
+        {
+          "id": "impl-reserve-task",
+          "title": "Reserve a book",
+          "description": "Implement reservation of an available book for a neighbor.",
+          "justifiedByObjectIds": [
+            "data-book-record",
+            "data-reservation-record",
+            "req-single-app-instance",
+            "workflow-book-swap"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-red-workflow-commands",
+              "association": "inherited",
+              "viaObjectIds": ["workflow-book-swap"]
+            }
+          ],
+          "nodeType": "task",
+          "origin": "planner_derived",
+          "status": "proposed"
+        },
+        {
+          "id": "impl-retention-policy",
+          "title": "Reservation-name retention policy",
+          "description": "Retention and deletion behavior for reservation names must be determined; no deletion policy is assumed.",
+          "justifiedByObjectIds": [
+            "data-reservation-record",
+            "question-name-retention-policy"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-green-retention-concern",
+              "association": "inherited",
+              "viaObjectIds": ["question-name-retention-policy"]
+            }
+          ],
+          "nodeType": "task",
+          "origin": "planner_derived",
+          "status": "undecided"
+        },
+        {
+          "id": "impl-sqlite",
+          "title": "SQLite storage",
+          "description": "Use SQLite to store book and reservation data.",
+          "justifiedByObjectIds": [
+            "decision-storage",
+            "proposal-sqlite-storage"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-blue-sqlite-conditional-test",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-sqlite-storage"]
+            },
+            {
+              "annotationId": "ann-blue-sqlite-consistency",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-sqlite-storage"]
+            },
+            {
+              "annotationId": "ann-blue-storage-question",
+              "association": "inherited",
+              "viaObjectIds": ["decision-storage"]
+            },
+            {
+              "annotationId": "ann-red-revised-sqlite",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-sqlite-storage"]
+            }
+          ],
+          "nodeType": "technology",
+          "origin": "decision_derived",
+          "status": "confirmed",
+          "primaryObjectId": "technology-sqlite"
+        },
+        {
+          "id": "impl-terminal-app",
+          "title": "Terminal application",
+          "description": "Use a terminal application for the MVP interface.",
+          "justifiedByObjectIds": [
+            "context-shared-offline-laptop",
+            "decision-interface",
+            "proposal-terminal-app"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-green-interface-question",
+              "association": "inherited",
+              "viaObjectIds": ["decision-interface"]
+            },
+            {
+              "annotationId": "ann-red-terminal-practical",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ],
+          "nodeType": "component",
+          "origin": "decision_derived",
+          "status": "confirmed",
+          "primaryObjectId": "proposal-terminal-app"
+        },
+        {
+          "id": "impl-title-search-task",
+          "title": "Search books by title",
+          "description": "Implement the confirmed title-search capability.",
+          "justifiedByObjectIds": [
+            "decision-interface",
+            "proposal-terminal-app",
+            "req-title-search"
+          ],
+          "annotations": [
+            {
+              "annotationId": "ann-green-interface-question",
+              "association": "inherited",
+              "viaObjectIds": ["decision-interface"]
+            },
+            {
+              "annotationId": "ann-red-terminal-practical",
+              "association": "inherited",
+              "viaObjectIds": ["proposal-terminal-app"]
+            },
+            {
+              "annotationId": "ann-yellow-title-search",
+              "association": "inherited",
+              "viaObjectIds": ["req-title-search"]
+            }
+          ],
+          "nodeType": "task",
+          "origin": "planner_derived",
+          "status": "proposed"
+        }
+      ],
+      "edges": [
+        {
+          "id": "edge-backup-contains-location",
+          "sourceNodeId": "impl-backup-command",
+          "targetNodeId": "impl-backup-location",
+          "justifiedByObjectIds": [
+            "proposal-backup-command",
+            "question-backup-location"
+          ],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-donation-precedes-list",
+          "sourceNodeId": "impl-donation-task",
+          "targetNodeId": "impl-list-task",
+          "justifiedByObjectIds": ["workflow-book-swap"],
+          "origin": "knowledge_derived",
+          "relation": "precedes",
+          "description": "The workflow records donations before listing available books."
+        },
+        {
+          "id": "edge-list-precedes-reserve",
+          "sourceNodeId": "impl-list-task",
+          "targetNodeId": "impl-reserve-task",
+          "justifiedByObjectIds": ["workflow-book-swap"],
+          "origin": "knowledge_derived",
+          "relation": "precedes",
+          "description": "The workflow lists available books before reserving one."
+        },
+        {
+          "id": "edge-mvp-contains-backup",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-backup-command",
+          "justifiedByObjectIds": [
+            "decision-backup-command",
+            "proposal-backup-command"
+          ],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-mvp-contains-barcode",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-barcode-deferred",
+          "justifiedByObjectIds": ["decision-barcode-scanning"],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-mvp-contains-retention",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-retention-policy",
+          "justifiedByObjectIds": ["question-name-retention-policy"],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-mvp-contains-scope",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-mvp-scope",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-mvp-contains-storage",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-data-storage-component",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-mvp-contains-terminal",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-terminal-app",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-mvp-contains-workflow",
+          "sourceNodeId": "impl-group-mvp",
+          "targetNodeId": "impl-book-swap-workflow",
+          "justifiedByObjectIds": ["goal-local-book-swap-tool"],
+          "origin": "planner_derived",
+          "relation": "contains"
+        },
+        {
+          "id": "edge-reservation-no-cloud",
+          "sourceNodeId": "impl-data-storage-component",
+          "targetNodeId": "impl-reservation-record",
+          "justifiedByObjectIds": [
+            "data-reservation-record",
+            "req-no-cloud-sync"
+          ],
+          "origin": "planner_derived",
+          "relation": "produces",
+          "description": "Reservation records remain in local storage; cloud synchronization is excluded."
+        },
+        {
+          "id": "edge-storage-uses-book-data",
+          "sourceNodeId": "impl-data-storage-component",
+          "targetNodeId": "impl-book-record",
+          "justifiedByObjectIds": ["data-book-record", "technology-sqlite"],
+          "origin": "planner_derived",
+          "relation": "uses",
+          "description": "Local storage uses SQLite to store book records."
+        },
+        {
+          "id": "edge-storage-uses-reservation-data",
+          "sourceNodeId": "impl-data-storage-component",
+          "targetNodeId": "impl-reservation-record",
+          "justifiedByObjectIds": [
+            "data-reservation-record",
+            "technology-sqlite"
+          ],
+          "origin": "planner_derived",
+          "relation": "uses",
+          "description": "Local storage uses SQLite to store reservation records."
+        },
+        {
+          "id": "edge-storage-uses-sqlite",
+          "sourceNodeId": "impl-data-storage-component",
+          "targetNodeId": "impl-sqlite",
+          "justifiedByObjectIds": [
+            "decision-storage",
+            "proposal-sqlite-storage"
+          ],
+          "origin": "planner_derived",
+          "relation": "uses",
+          "description": "Local data storage uses the selected SQLite technology."
+        },
+        {
+          "id": "edge-workflow-implements-donation",
+          "sourceNodeId": "impl-donation-task",
+          "targetNodeId": "impl-book-swap-workflow",
+          "justifiedByObjectIds": ["workflow-book-swap"],
+          "origin": "planner_derived",
+          "relation": "implements"
+        },
+        {
+          "id": "edge-workflow-implements-list",
+          "sourceNodeId": "impl-list-task",
+          "targetNodeId": "impl-book-swap-workflow",
+          "justifiedByObjectIds": ["workflow-book-swap"],
+          "origin": "planner_derived",
+          "relation": "implements"
+        },
+        {
+          "id": "edge-workflow-implements-reserve",
+          "sourceNodeId": "impl-reserve-task",
+          "targetNodeId": "impl-book-swap-workflow",
+          "justifiedByObjectIds": ["workflow-book-swap"],
+          "origin": "planner_derived",
+          "relation": "implements"
+        },
+        {
+          "id": "edge-workflow-implements-search",
+          "sourceNodeId": "impl-title-search-task",
+          "targetNodeId": "impl-book-swap-workflow",
+          "justifiedByObjectIds": ["req-title-search", "workflow-book-swap"],
+          "origin": "planner_derived",
+          "relation": "implements"
+        },
+        {
+          "id": "edge-workflow-produces-book",
+          "sourceNodeId": "impl-book-swap-workflow",
+          "targetNodeId": "impl-book-record",
+          "justifiedByObjectIds": ["data-book-record", "workflow-book-swap"],
+          "origin": "planner_derived",
+          "relation": "produces",
+          "description": "Donation entry creates or updates book records."
+        },
+        {
+          "id": "edge-workflow-produces-reservation",
+          "sourceNodeId": "impl-book-swap-workflow",
+          "targetNodeId": "impl-reservation-record",
+          "justifiedByObjectIds": [
+            "data-reservation-record",
+            "workflow-book-swap"
+          ],
+          "origin": "planner_derived",
+          "relation": "produces",
+          "description": "Reservation creates reservation records."
+        },
+        {
+          "id": "edge-workflow-uses-book-data",
+          "sourceNodeId": "impl-book-swap-workflow",
+          "targetNodeId": "impl-book-record",
+          "justifiedByObjectIds": ["data-book-record", "workflow-book-swap"],
+          "origin": "knowledge_derived",
+          "relation": "uses",
+          "primaryRelationshipId": "rel-workflow-book-record"
+        },
+        {
+          "id": "edge-workflow-uses-reservation-data",
+          "sourceNodeId": "impl-book-swap-workflow",
+          "targetNodeId": "impl-reservation-record",
+          "justifiedByObjectIds": [
+            "data-reservation-record",
+            "workflow-book-swap"
+          ],
+          "origin": "knowledge_derived",
+          "relation": "uses",
+          "primaryRelationshipId": "rel-workflow-reservation-record"
+        }
+      ]
+    },
+    "crossGraphLinks": {
+      "links": [
+        {
+          "decisionNodeId": "decision-backup-command",
+          "implementationNodeId": "impl-backup-command",
+          "viaKnowledgeObjectId": "decision-backup-command",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-barcode-scanning",
+          "implementationNodeId": "impl-barcode-deferred",
+          "viaKnowledgeObjectId": "decision-barcode-scanning",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-barcode-scanning",
+          "implementationNodeId": "impl-barcode-deferred",
+          "viaKnowledgeObjectId": "decision-barcode-scanning",
+          "kind": "primary_shared_object"
+        },
+        {
+          "decisionNodeId": "decision-interface",
+          "implementationNodeId": "impl-terminal-app",
+          "viaKnowledgeObjectId": "decision-interface",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-interface",
+          "implementationNodeId": "impl-title-search-task",
+          "viaKnowledgeObjectId": "decision-interface",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-storage",
+          "implementationNodeId": "impl-book-record",
+          "viaKnowledgeObjectId": "decision-storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-storage",
+          "implementationNodeId": "impl-data-storage-component",
+          "viaKnowledgeObjectId": "decision-storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-storage",
+          "implementationNodeId": "impl-reservation-record",
+          "viaKnowledgeObjectId": "decision-storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "decision-storage",
+          "implementationNodeId": "impl-sqlite",
+          "viaKnowledgeObjectId": "decision-storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-backup-command",
+          "implementationNodeId": "impl-backup-command",
+          "viaKnowledgeObjectId": "proposal-backup-command",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-backup-command",
+          "implementationNodeId": "impl-backup-command",
+          "viaKnowledgeObjectId": "proposal-backup-command",
+          "kind": "primary_shared_object"
+        },
+        {
+          "decisionNodeId": "option-backup-command",
+          "implementationNodeId": "impl-backup-location",
+          "viaKnowledgeObjectId": "proposal-backup-command",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-barcode-scanning",
+          "implementationNodeId": "impl-barcode-deferred",
+          "viaKnowledgeObjectId": "proposal-barcode-scanning",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-sqlite-storage",
+          "implementationNodeId": "impl-data-storage-component",
+          "viaKnowledgeObjectId": "proposal-sqlite-storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-sqlite-storage",
+          "implementationNodeId": "impl-sqlite",
+          "viaKnowledgeObjectId": "proposal-sqlite-storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-terminal-app",
+          "implementationNodeId": "impl-terminal-app",
+          "viaKnowledgeObjectId": "proposal-terminal-app",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "option-terminal-app",
+          "implementationNodeId": "impl-terminal-app",
+          "viaKnowledgeObjectId": "proposal-terminal-app",
+          "kind": "primary_shared_object"
+        },
+        {
+          "decisionNodeId": "option-terminal-app",
+          "implementationNodeId": "impl-title-search-task",
+          "viaKnowledgeObjectId": "proposal-terminal-app",
+          "kind": "justification"
+        }
+      ],
+      "byDecisionNodeId": {
+        "group-mvp-choices": [],
+        "decision-interface": [
+          {
+            "decisionNodeId": "decision-interface",
+            "implementationNodeId": "impl-terminal-app",
+            "viaKnowledgeObjectId": "decision-interface",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "decision-interface",
+            "implementationNodeId": "impl-title-search-task",
+            "viaKnowledgeObjectId": "decision-interface",
+            "kind": "justification"
+          }
+        ],
+        "option-terminal-app": [
+          {
+            "decisionNodeId": "option-terminal-app",
+            "implementationNodeId": "impl-terminal-app",
+            "viaKnowledgeObjectId": "proposal-terminal-app",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-terminal-app",
+            "implementationNodeId": "impl-terminal-app",
+            "viaKnowledgeObjectId": "proposal-terminal-app",
+            "kind": "primary_shared_object"
+          },
+          {
+            "decisionNodeId": "option-terminal-app",
+            "implementationNodeId": "impl-title-search-task",
+            "viaKnowledgeObjectId": "proposal-terminal-app",
+            "kind": "justification"
+          }
+        ],
+        "option-local-browser-ui": [],
+        "decision-storage": [
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-book-record",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-data-storage-component",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-reservation-record",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-sqlite",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          }
+        ],
+        "option-csv-storage": [],
+        "option-sqlite-storage": [
+          {
+            "decisionNodeId": "option-sqlite-storage",
+            "implementationNodeId": "impl-data-storage-component",
+            "viaKnowledgeObjectId": "proposal-sqlite-storage",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-sqlite-storage",
+            "implementationNodeId": "impl-sqlite",
+            "viaKnowledgeObjectId": "proposal-sqlite-storage",
+            "kind": "justification"
+          }
+        ],
+        "decision-barcode-scanning": [
+          {
+            "decisionNodeId": "decision-barcode-scanning",
+            "implementationNodeId": "impl-barcode-deferred",
+            "viaKnowledgeObjectId": "decision-barcode-scanning",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "decision-barcode-scanning",
+            "implementationNodeId": "impl-barcode-deferred",
+            "viaKnowledgeObjectId": "decision-barcode-scanning",
+            "kind": "primary_shared_object"
+          }
+        ],
+        "option-barcode-scanning": [
+          {
+            "decisionNodeId": "option-barcode-scanning",
+            "implementationNodeId": "impl-barcode-deferred",
+            "viaKnowledgeObjectId": "proposal-barcode-scanning",
+            "kind": "justification"
+          }
+        ],
+        "decision-backup-command": [
+          {
+            "decisionNodeId": "decision-backup-command",
+            "implementationNodeId": "impl-backup-command",
+            "viaKnowledgeObjectId": "decision-backup-command",
+            "kind": "justification"
+          }
+        ],
+        "option-backup-command": [
+          {
+            "decisionNodeId": "option-backup-command",
+            "implementationNodeId": "impl-backup-command",
+            "viaKnowledgeObjectId": "proposal-backup-command",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-backup-command",
+            "implementationNodeId": "impl-backup-command",
+            "viaKnowledgeObjectId": "proposal-backup-command",
+            "kind": "primary_shared_object"
+          },
+          {
+            "decisionNodeId": "option-backup-command",
+            "implementationNodeId": "impl-backup-location",
+            "viaKnowledgeObjectId": "proposal-backup-command",
+            "kind": "justification"
+          }
+        ]
+      },
+      "byImplementationNodeId": {
+        "impl-group-mvp": [],
+        "impl-terminal-app": [
+          {
+            "decisionNodeId": "decision-interface",
+            "implementationNodeId": "impl-terminal-app",
+            "viaKnowledgeObjectId": "decision-interface",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-terminal-app",
+            "implementationNodeId": "impl-terminal-app",
+            "viaKnowledgeObjectId": "proposal-terminal-app",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-terminal-app",
+            "implementationNodeId": "impl-terminal-app",
+            "viaKnowledgeObjectId": "proposal-terminal-app",
+            "kind": "primary_shared_object"
+          }
+        ],
+        "impl-sqlite": [
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-sqlite",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-sqlite-storage",
+            "implementationNodeId": "impl-sqlite",
+            "viaKnowledgeObjectId": "proposal-sqlite-storage",
+            "kind": "justification"
+          }
+        ],
+        "impl-book-record": [
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-book-record",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          }
+        ],
+        "impl-reservation-record": [
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-reservation-record",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          }
+        ],
+        "impl-book-swap-workflow": [],
+        "impl-data-storage-component": [
+          {
+            "decisionNodeId": "decision-storage",
+            "implementationNodeId": "impl-data-storage-component",
+            "viaKnowledgeObjectId": "decision-storage",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-sqlite-storage",
+            "implementationNodeId": "impl-data-storage-component",
+            "viaKnowledgeObjectId": "proposal-sqlite-storage",
+            "kind": "justification"
+          }
+        ],
+        "impl-donation-task": [],
+        "impl-list-task": [],
+        "impl-reserve-task": [],
+        "impl-title-search-task": [
+          {
+            "decisionNodeId": "decision-interface",
+            "implementationNodeId": "impl-title-search-task",
+            "viaKnowledgeObjectId": "decision-interface",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-terminal-app",
+            "implementationNodeId": "impl-title-search-task",
+            "viaKnowledgeObjectId": "proposal-terminal-app",
+            "kind": "justification"
+          }
+        ],
+        "impl-backup-command": [
+          {
+            "decisionNodeId": "decision-backup-command",
+            "implementationNodeId": "impl-backup-command",
+            "viaKnowledgeObjectId": "decision-backup-command",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-backup-command",
+            "implementationNodeId": "impl-backup-command",
+            "viaKnowledgeObjectId": "proposal-backup-command",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "option-backup-command",
+            "implementationNodeId": "impl-backup-command",
+            "viaKnowledgeObjectId": "proposal-backup-command",
+            "kind": "primary_shared_object"
+          }
+        ],
+        "impl-backup-location": [
+          {
+            "decisionNodeId": "option-backup-command",
+            "implementationNodeId": "impl-backup-location",
+            "viaKnowledgeObjectId": "proposal-backup-command",
+            "kind": "justification"
+          }
+        ],
+        "impl-retention-policy": [],
+        "impl-mvp-scope": [],
+        "impl-barcode-deferred": [
+          {
+            "decisionNodeId": "decision-barcode-scanning",
+            "implementationNodeId": "impl-barcode-deferred",
+            "viaKnowledgeObjectId": "decision-barcode-scanning",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "decision-barcode-scanning",
+            "implementationNodeId": "impl-barcode-deferred",
+            "viaKnowledgeObjectId": "decision-barcode-scanning",
+            "kind": "primary_shared_object"
+          },
+          {
+            "decisionNodeId": "option-barcode-scanning",
+            "implementationNodeId": "impl-barcode-deferred",
+            "viaKnowledgeObjectId": "proposal-barcode-scanning",
+            "kind": "justification"
+          }
+        ]
+      }
+    },
+    "warnings": []
+  },
+  "validationReport": {
+    "passed": true,
+    "issues": []
+  }
+}

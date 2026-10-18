@@ -23,6 +23,9 @@ import type { AgentId } from '../core/types.js';
 import { complete, completionOnEnter } from './commands.js';
 import type { ChatController, PresentationSnapshot } from './controller.js';
 import { edit, editorWindow, type EditorState } from './editor.js';
+import { IdleAnimation, type SpriteFrame } from './sprites.js';
+import { theme, visibleText } from './theme.js';
+import { DrawingLink } from './drawing.js';
 import { boldRuns } from './message-text.js';
 import { FloorAnimation, type SpriteAnimations } from './sprites.js';
 import { dimAvatarColor, theme, visibleText } from './theme.js';
@@ -31,6 +34,7 @@ export function activityLabel(
   state: PresentationSnapshot,
   id: AgentId,
 ): string {
+  if (state.drawing?.status === 'running') return 'paused';
   if (state.displaying === id)
     return state.room.mode === 'paused' ? 'paused speaking' : 'speaking';
   if (state.waiting.includes(id)) return 'waiting';
@@ -45,6 +49,7 @@ export function activityLabel(
 
 export function roomLabel(state: PresentationSnapshot): string {
   if (state.closing) return 'Saving…';
+  if (state.drawing?.status === 'running') return 'Drawing maps…';
   if (state.room.mode === 'paused') return 'Paused';
   if (state.displaying || state.waiting.length) return 'Discussion';
   if (state.question) return `Answer ${identities[state.question.agent].name}`;
@@ -266,7 +271,9 @@ export function App({
     setDismissed(false);
     setSelected(0);
   };
-  usePaste(insert, { isActive: !state.closing });
+  usePaste(insert, {
+    isActive: !state.closing,
+  });
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       quit();
@@ -388,15 +395,18 @@ export function App({
     : state.room.queue.length
       ? `Next: ${state.room.queue.map((id) => identities[id].name).join(' → ')}`
       : ' ';
-  const notice = state.question
-    ? `${identities[state.question.agent].name} is waiting for your reply`
-    : state.room.mode === 'paused'
-      ? (state.room.notice ?? 'Paused · /resume to continue')
-      : state.room.handRaised
-        ? state.displaying || state.waiting.length
-          ? 'Hand raised · you speak next'
-          : 'Your turn'
-        : (state.room.notice ?? ' ');
+  const notice =
+    state.drawing?.status === 'running'
+      ? `${state.drawing.message} · All agents paused`
+      : state.question
+        ? `${identities[state.question.agent].name} is waiting for your reply`
+        : state.room.mode === 'paused'
+          ? (state.room.notice ?? 'Paused · /resume to continue')
+          : state.room.handRaised
+            ? state.displaying || state.waiting.length
+              ? 'Hand raised · you speak next'
+              : 'Your turn'
+            : (state.room.notice ?? ' ');
   return (
     <Box
       width={columns}
@@ -479,6 +489,12 @@ export function App({
                     ),
                   )}
                 </Text>
+                {message.link && (
+                  <DrawingLink
+                    label={message.link.label}
+                    url={message.link.url}
+                  />
+                )}
               </Box>
             );
           })}

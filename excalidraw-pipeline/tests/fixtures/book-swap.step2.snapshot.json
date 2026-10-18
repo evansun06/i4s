@@ -1,0 +1,538 @@
+{
+  "planningGraphs": {
+    "schemaVersion": "1.0",
+    "conversationId": "conversation-23c93077d648565a",
+    "knowledgeSnapshotSequence": 13,
+    "decisionGraph": {
+      "nodes": [
+        {
+          "id": "dg_browser",
+          "nodeType": "option",
+          "title": "Browser UI",
+          "description": "Local browser interface.",
+          "primaryObjectId": "proposal_browser",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "a_yellow_browser",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ]
+        },
+        {
+          "id": "dg_csv",
+          "nodeType": "option",
+          "title": "CSV",
+          "description": "File storage.",
+          "primaryObjectId": "proposal_csv",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "a_blue_csv",
+              "association": "direct",
+              "viaObjectIds": []
+            },
+            {
+              "annotationId": "a_red_csv",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ]
+        },
+        {
+          "id": "dg_delete_names",
+          "nodeType": "option",
+          "title": "Delete after collection",
+          "description": "An unapproved proposal.",
+          "primaryObjectId": "proposal_retention",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "a_green_retention",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ]
+        },
+        {
+          "id": "dg_interface",
+          "nodeType": "decision",
+          "title": "Interface choice",
+          "description": "Choose the volunteer interface.",
+          "primaryObjectId": "decision_interface",
+          "justifiedByObjectIds": ["constraint_time", "context_volunteers"],
+          "annotations": []
+        },
+        {
+          "id": "dg_retention",
+          "nodeType": "decision",
+          "title": "Name retention",
+          "description": "Unresolved retention policy.",
+          "primaryObjectId": "decision_retention",
+          "justifiedByObjectIds": [],
+          "annotations": []
+        },
+        {
+          "id": "dg_sqlite",
+          "nodeType": "option",
+          "title": "SQLite",
+          "description": "Consistent local updates.",
+          "primaryObjectId": "proposal_sqlite",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "a_blue_sqlite",
+              "association": "direct",
+              "viaObjectIds": []
+            },
+            {
+              "annotationId": "a_red_sqlite",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ]
+        },
+        {
+          "id": "dg_storage",
+          "nodeType": "decision",
+          "title": "Storage choice",
+          "description": "Choose local storage.",
+          "primaryObjectId": "decision_storage",
+          "justifiedByObjectIds": ["constraint_local", "risk_reservations"],
+          "annotations": []
+        },
+        {
+          "id": "dg_terminal",
+          "nodeType": "option",
+          "title": "Terminal app",
+          "description": "Local terminal interface.",
+          "primaryObjectId": "proposal_terminal",
+          "justifiedByObjectIds": [],
+          "annotations": [
+            {
+              "annotationId": "a_red_terminal",
+              "association": "direct",
+              "viaObjectIds": []
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "de_browser",
+          "sourceNodeId": "dg_interface",
+          "targetNodeId": "dg_browser",
+          "relation": "has_option",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["decision_interface"]
+        },
+        {
+          "id": "de_csv",
+          "sourceNodeId": "dg_storage",
+          "targetNodeId": "dg_csv",
+          "relation": "has_option",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["decision_storage"]
+        },
+        {
+          "id": "de_retention",
+          "sourceNodeId": "dg_retention",
+          "targetNodeId": "dg_delete_names",
+          "relation": "has_option",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["decision_retention"]
+        },
+        {
+          "id": "de_sqlite",
+          "sourceNodeId": "dg_storage",
+          "targetNodeId": "dg_sqlite",
+          "relation": "has_option",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["decision_storage"]
+        },
+        {
+          "id": "de_terminal",
+          "sourceNodeId": "dg_interface",
+          "targetNodeId": "dg_terminal",
+          "relation": "has_option",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["decision_interface"]
+        }
+      ]
+    },
+    "implementationGraph": {
+      "nodes": [
+        {
+          "id": "ig_app",
+          "nodeType": "component",
+          "title": "Terminal app",
+          "description": "Volunteer commands on the offline shared laptop.",
+          "primaryObjectId": "entity_terminal",
+          "origin": "conversation_explicit",
+          "status": "confirmed",
+          "justifiedByObjectIds": [
+            "constraint_local",
+            "constraint_scope",
+            "decision_interface",
+            "proposal_terminal"
+          ],
+          "annotations": [
+            {
+              "annotationId": "a_red_terminal",
+              "association": "inherited",
+              "viaObjectIds": ["proposal_terminal"]
+            }
+          ]
+        },
+        {
+          "id": "ig_backup",
+          "nodeType": "task",
+          "title": "Implement backup command",
+          "description": "Implement the requested command after deciding its destination.",
+          "origin": "planner_derived",
+          "status": "proposed",
+          "justifiedByObjectIds": ["question_backup", "requirement_backup"],
+          "annotations": []
+        },
+        {
+          "id": "ig_backup_choice",
+          "nodeType": "task",
+          "title": "Choose backup location",
+          "description": "Ask the user to resolve the open destination question.",
+          "origin": "planner_derived",
+          "status": "undecided",
+          "justifiedByObjectIds": ["question_backup"],
+          "annotations": []
+        },
+        {
+          "id": "ig_barcode",
+          "nodeType": "task",
+          "title": "Barcode scanning after MVP",
+          "description": "Preserve the deferred scope; do not include it in the current build.",
+          "origin": "planner_derived",
+          "status": "deferred",
+          "justifiedByObjectIds": ["requirement_barcode"],
+          "annotations": []
+        },
+        {
+          "id": "ig_book",
+          "nodeType": "data_entity",
+          "title": "Book",
+          "description": "Title, author and availability.",
+          "primaryObjectId": "data_book",
+          "origin": "conversation_explicit",
+          "status": "confirmed",
+          "justifiedByObjectIds": [],
+          "annotations": []
+        },
+        {
+          "id": "ig_reservation",
+          "nodeType": "data_entity",
+          "title": "Reservation",
+          "description": "Neighbor name and book; retention policy unresolved.",
+          "primaryObjectId": "data_reservation",
+          "origin": "conversation_explicit",
+          "status": "confirmed",
+          "justifiedByObjectIds": ["decision_retention"],
+          "annotations": []
+        },
+        {
+          "id": "ig_reservation_test",
+          "nodeType": "task",
+          "title": "Test duplicate reservation prevention",
+          "description": "Suggested check that a reserved book cannot be reserved again.",
+          "origin": "planner_suggested",
+          "status": "proposed",
+          "justifiedByObjectIds": ["proposal_sqlite", "risk_reservations"],
+          "annotations": [
+            {
+              "annotationId": "a_blue_sqlite",
+              "association": "inherited",
+              "viaObjectIds": ["proposal_sqlite"]
+            },
+            {
+              "annotationId": "a_red_sqlite",
+              "association": "inherited",
+              "viaObjectIds": ["proposal_sqlite"]
+            }
+          ]
+        },
+        {
+          "id": "ig_search",
+          "nodeType": "task",
+          "title": "Implement title search",
+          "description": "Expose the confirmed title-search capability.",
+          "origin": "planner_derived",
+          "status": "proposed",
+          "justifiedByObjectIds": ["requirement_search"],
+          "annotations": [
+            {
+              "annotationId": "a_yellow_search",
+              "association": "inherited",
+              "viaObjectIds": ["requirement_search"]
+            }
+          ]
+        },
+        {
+          "id": "ig_sqlite",
+          "nodeType": "technology",
+          "title": "SQLite",
+          "description": "Local book and reservation storage.",
+          "primaryObjectId": "entity_sqlite",
+          "origin": "decision_derived",
+          "status": "confirmed",
+          "justifiedByObjectIds": ["decision_storage", "proposal_sqlite"],
+          "annotations": [
+            {
+              "annotationId": "a_blue_sqlite",
+              "association": "inherited",
+              "viaObjectIds": ["proposal_sqlite"]
+            },
+            {
+              "annotationId": "a_red_sqlite",
+              "association": "inherited",
+              "viaObjectIds": ["proposal_sqlite"]
+            }
+          ]
+        },
+        {
+          "id": "ig_workflow",
+          "nodeType": "workflow",
+          "title": "Donation to reservation",
+          "description": "Record, list and reserve books.",
+          "primaryObjectId": "workflow_swap",
+          "origin": "conversation_explicit",
+          "status": "proposed",
+          "justifiedByObjectIds": ["goal_swap"],
+          "annotations": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "ie_backup",
+          "sourceNodeId": "ig_backup",
+          "targetNodeId": "ig_app",
+          "relation": "implements",
+          "origin": "planner_derived",
+          "justifiedByObjectIds": ["requirement_backup"]
+        },
+        {
+          "id": "ie_backup_choice",
+          "sourceNodeId": "ig_backup",
+          "targetNodeId": "ig_backup_choice",
+          "relation": "depends_on",
+          "origin": "planner_derived",
+          "justifiedByObjectIds": ["question_backup"]
+        },
+        {
+          "id": "ie_books",
+          "sourceNodeId": "ig_app",
+          "targetNodeId": "ig_book",
+          "relation": "uses",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["data_book"]
+        },
+        {
+          "id": "ie_reservations",
+          "sourceNodeId": "ig_app",
+          "targetNodeId": "ig_reservation",
+          "relation": "uses",
+          "origin": "knowledge_derived",
+          "justifiedByObjectIds": ["data_reservation"]
+        },
+        {
+          "id": "ie_search",
+          "sourceNodeId": "ig_search",
+          "targetNodeId": "ig_app",
+          "relation": "implements",
+          "origin": "planner_derived",
+          "justifiedByObjectIds": ["requirement_search"]
+        },
+        {
+          "id": "ie_storage",
+          "sourceNodeId": "ig_app",
+          "targetNodeId": "ig_sqlite",
+          "relation": "uses",
+          "origin": "conversation_explicit",
+          "primaryRelationshipId": "r_uses",
+          "justifiedByObjectIds": ["decision_storage"]
+        }
+      ]
+    },
+    "crossGraphLinks": {
+      "links": [
+        {
+          "decisionNodeId": "dg_interface",
+          "implementationNodeId": "ig_app",
+          "viaKnowledgeObjectId": "decision_interface",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "dg_retention",
+          "implementationNodeId": "ig_reservation",
+          "viaKnowledgeObjectId": "decision_retention",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "dg_sqlite",
+          "implementationNodeId": "ig_reservation_test",
+          "viaKnowledgeObjectId": "proposal_sqlite",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "dg_sqlite",
+          "implementationNodeId": "ig_sqlite",
+          "viaKnowledgeObjectId": "proposal_sqlite",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "dg_storage",
+          "implementationNodeId": "ig_sqlite",
+          "viaKnowledgeObjectId": "decision_storage",
+          "kind": "justification"
+        },
+        {
+          "decisionNodeId": "dg_terminal",
+          "implementationNodeId": "ig_app",
+          "viaKnowledgeObjectId": "proposal_terminal",
+          "kind": "justification"
+        }
+      ],
+      "byDecisionNodeId": {
+        "dg_interface": [
+          {
+            "decisionNodeId": "dg_interface",
+            "implementationNodeId": "ig_app",
+            "viaKnowledgeObjectId": "decision_interface",
+            "kind": "justification"
+          }
+        ],
+        "dg_terminal": [
+          {
+            "decisionNodeId": "dg_terminal",
+            "implementationNodeId": "ig_app",
+            "viaKnowledgeObjectId": "proposal_terminal",
+            "kind": "justification"
+          }
+        ],
+        "dg_browser": [],
+        "dg_storage": [
+          {
+            "decisionNodeId": "dg_storage",
+            "implementationNodeId": "ig_sqlite",
+            "viaKnowledgeObjectId": "decision_storage",
+            "kind": "justification"
+          }
+        ],
+        "dg_csv": [],
+        "dg_sqlite": [
+          {
+            "decisionNodeId": "dg_sqlite",
+            "implementationNodeId": "ig_reservation_test",
+            "viaKnowledgeObjectId": "proposal_sqlite",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "dg_sqlite",
+            "implementationNodeId": "ig_sqlite",
+            "viaKnowledgeObjectId": "proposal_sqlite",
+            "kind": "justification"
+          }
+        ],
+        "dg_retention": [
+          {
+            "decisionNodeId": "dg_retention",
+            "implementationNodeId": "ig_reservation",
+            "viaKnowledgeObjectId": "decision_retention",
+            "kind": "justification"
+          }
+        ],
+        "dg_delete_names": []
+      },
+      "byImplementationNodeId": {
+        "ig_app": [
+          {
+            "decisionNodeId": "dg_interface",
+            "implementationNodeId": "ig_app",
+            "viaKnowledgeObjectId": "decision_interface",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "dg_terminal",
+            "implementationNodeId": "ig_app",
+            "viaKnowledgeObjectId": "proposal_terminal",
+            "kind": "justification"
+          }
+        ],
+        "ig_sqlite": [
+          {
+            "decisionNodeId": "dg_sqlite",
+            "implementationNodeId": "ig_sqlite",
+            "viaKnowledgeObjectId": "proposal_sqlite",
+            "kind": "justification"
+          },
+          {
+            "decisionNodeId": "dg_storage",
+            "implementationNodeId": "ig_sqlite",
+            "viaKnowledgeObjectId": "decision_storage",
+            "kind": "justification"
+          }
+        ],
+        "ig_book": [],
+        "ig_reservation": [
+          {
+            "decisionNodeId": "dg_retention",
+            "implementationNodeId": "ig_reservation",
+            "viaKnowledgeObjectId": "decision_retention",
+            "kind": "justification"
+          }
+        ],
+        "ig_workflow": [],
+        "ig_search": [],
+        "ig_backup": [],
+        "ig_backup_choice": [],
+        "ig_reservation_test": [
+          {
+            "decisionNodeId": "dg_sqlite",
+            "implementationNodeId": "ig_reservation_test",
+            "viaKnowledgeObjectId": "proposal_sqlite",
+            "kind": "justification"
+          }
+        ],
+        "ig_barcode": []
+      }
+    },
+    "warnings": [
+      {
+        "code": "missing_information",
+        "severity": "warning",
+        "message": "Backup location remains undecided.",
+        "objectOrGraphIds": ["question_backup"]
+      },
+      {
+        "code": "missing_information",
+        "severity": "warning",
+        "message": "Name-retention policy remains undecided; the agent's proposal is not approved.",
+        "objectOrGraphIds": ["decision_retention"]
+      }
+    ]
+  },
+  "validationReport": {
+    "passed": true,
+    "issues": [
+      {
+        "code": "missing_information",
+        "severity": "warning",
+        "message": "Backup location remains undecided.",
+        "objectOrGraphIds": ["question_backup"]
+      },
+      {
+        "code": "missing_information",
+        "severity": "warning",
+        "message": "Name-retention policy remains undecided; the agent's proposal is not approved.",
+        "objectOrGraphIds": ["decision_retention"]
+      }
+    ]
+  }
+}

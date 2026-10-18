@@ -1,0 +1,1103 @@
+{
+  "knowledgeGraph": {
+    "schemaVersion": "1.0",
+    "conversationId": "conversation-23c93077d648565a",
+    "snapshotSequence": 13,
+    "objects": [
+      {
+        "id": "constraint-team-budget-schedule",
+        "title": "MVP team, budget, and schedule",
+        "description": "The project has two volunteers, a total budget of $100, and four weeks.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m0",
+            "excerpt": "We have two volunteers, a $100 total budget, and four weeks."
+          }
+        ],
+        "kind": "constraint",
+        "constraintKind": "people",
+        "flexibility": "hard",
+        "expression": "Two volunteers; $100 total budget; four weeks.",
+        "appliesToObjectIds": ["goal-local-book-swap-tool"]
+      },
+      {
+        "id": "goal-local-book-swap-tool",
+        "title": "Local neighborhood book-swap tool",
+        "description": "Provide a local tool for volunteers to record donated books and reserve them for neighbors.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m0",
+            "excerpt": "I want a local tool for a neighborhood book swap. Volunteers record donated books and reserve them for neighbors."
+          }
+        ],
+        "kind": "goal",
+        "priority": "unspecified",
+        "successCriteria": [],
+        "state": "active"
+      },
+      {
+        "id": "req-no-accounts-payments",
+        "title": "No accounts or payment processing in MVP",
+        "description": "The MVP excludes accounts and payment processing.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m0",
+            "excerpt": "No accounts or payment processing for the MVP."
+          }
+        ],
+        "kind": "requirement",
+        "requirementKind": "functional",
+        "priority": "high",
+        "state": "confirmed",
+        "acceptanceCriteria": [
+          "MVP has no accounts.",
+          "MVP has no payment processing."
+        ]
+      },
+      {
+        "id": "decision-interface",
+        "title": "MVP user interface",
+        "description": "Choose the interface for the local volunteer tool.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m1",
+            "excerpt": "Start with a terminal app and a CSV file."
+          },
+          {
+            "messageId": "m2",
+            "excerpt": "I propose a local browser UI instead of a terminal app."
+          },
+          {
+            "messageId": "m3",
+            "excerpt": "QUESTION: Will volunteers share one computer, and are they comfortable using a terminal?"
+          },
+          {
+            "messageId": "m4",
+            "excerpt": "One shared laptop, offline at the venue. Both volunteers use terminals. Choose the terminal app; do not build the browser UI for this MVP."
+          }
+        ],
+        "kind": "decision",
+        "question": "Which interface should the MVP use?",
+        "category": "architecture",
+        "state": "resolved",
+        "options": [
+          {
+            "proposalId": "proposal-local-browser-ui",
+            "disposition": "not_selected",
+            "dispositionSourceRefs": [
+              {
+                "messageId": "m4",
+                "excerpt": "do not build the browser UI for this MVP."
+              }
+            ]
+          },
+          {
+            "proposalId": "proposal-terminal-app",
+            "disposition": "selected",
+            "dispositionSourceRefs": [
+              {
+                "messageId": "m4",
+                "excerpt": "Choose the terminal app; do not build the browser UI for this MVP."
+              }
+            ]
+          }
+        ],
+        "authority": "explicit_user",
+        "history": [
+          {
+            "sequence": 1,
+            "changeType": "proposed",
+            "authority": "not_decided",
+            "sourceRefs": [
+              {
+                "messageId": "m1",
+                "excerpt": "Start with a terminal app and a CSV file."
+              }
+            ]
+          },
+          {
+            "sequence": 2,
+            "changeType": "proposed",
+            "authority": "not_decided",
+            "sourceRefs": [
+              {
+                "messageId": "m2",
+                "excerpt": "I propose a local browser UI instead of a terminal app."
+              }
+            ]
+          },
+          {
+            "sequence": 4,
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [
+              {
+                "messageId": "m4",
+                "excerpt": "Choose the terminal app; do not build the browser UI for this MVP."
+              }
+            ],
+            "selectedProposalId": "proposal-terminal-app"
+          }
+        ],
+        "selectedProposalId": "proposal-terminal-app",
+        "selectionMode": "single"
+      },
+      {
+        "id": "decision-storage",
+        "title": "MVP storage approach",
+        "description": "Choose how the MVP stores book and reservation data.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m1",
+            "excerpt": "Start with a terminal app and a CSV file."
+          },
+          {
+            "messageId": "m10",
+            "excerpt": "Change the storage choice to SQLite instead of CSV. Correct reservation updates matter more than editing a spreadsheet."
+          },
+          {
+            "messageId": "m5",
+            "excerpt": "CSV is easy to inspect but reservations can be corrupted by careless edits. SQLite could keep book and reservation updates consistent. QUESTION: Which storage approach should we use?"
+          },
+          {
+            "messageId": "m6",
+            "excerpt": "Use CSV initially."
+          }
+        ],
+        "kind": "decision",
+        "question": "Which storage approach should the MVP use?",
+        "category": "architecture",
+        "state": "resolved",
+        "options": [
+          {
+            "proposalId": "proposal-csv-storage",
+            "disposition": "not_selected",
+            "dispositionSourceRefs": [
+              {
+                "messageId": "m10",
+                "excerpt": "Change the storage choice to SQLite instead of CSV."
+              }
+            ]
+          },
+          {
+            "proposalId": "proposal-sqlite-storage",
+            "disposition": "selected",
+            "dispositionSourceRefs": [
+              {
+                "messageId": "m10",
+                "excerpt": "Change the storage choice to SQLite instead of CSV."
+              }
+            ]
+          }
+        ],
+        "authority": "explicit_user",
+        "history": [
+          {
+            "sequence": 1,
+            "changeType": "proposed",
+            "authority": "not_decided",
+            "sourceRefs": [
+              {
+                "messageId": "m1",
+                "excerpt": "Start with a terminal app and a CSV file."
+              }
+            ]
+          },
+          {
+            "sequence": 5,
+            "changeType": "proposed",
+            "authority": "not_decided",
+            "sourceRefs": [
+              {
+                "messageId": "m5",
+                "excerpt": "SQLite could keep book and reservation updates consistent."
+              }
+            ]
+          },
+          {
+            "sequence": 6,
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [
+              {
+                "messageId": "m6",
+                "excerpt": "Use CSV initially."
+              }
+            ],
+            "selectedProposalId": "proposal-csv-storage"
+          },
+          {
+            "sequence": 10,
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [
+              {
+                "messageId": "m10",
+                "excerpt": "Change the storage choice to SQLite instead of CSV."
+              }
+            ],
+            "selectedProposalId": "proposal-sqlite-storage"
+          }
+        ],
+        "selectedProposalId": "proposal-sqlite-storage",
+        "selectionMode": "single"
+      },
+      {
+        "id": "proposal-csv-storage",
+        "title": "CSV storage",
+        "description": "Store the book and reservation information using CSV.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m1",
+            "excerpt": "Start with a terminal app and a CSV file."
+          },
+          {
+            "messageId": "m10",
+            "excerpt": "Change the storage choice to SQLite instead of CSV."
+          },
+          {
+            "messageId": "m12",
+            "excerpt": "I revise my CSV recommendation: I now support SQLite because the user prioritizes reservation correctness."
+          },
+          {
+            "messageId": "m6",
+            "excerpt": "Use CSV initially."
+          },
+          {
+            "messageId": "m7",
+            "excerpt": "I support CSV because volunteers can inspect it."
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["red", "user"],
+        "state": "superseded",
+        "tradeoffs": ["Easy for volunteers to inspect."],
+        "intendedBenefit": "Allow volunteers to inspect the stored data."
+      },
+      {
+        "id": "proposal-terminal-app",
+        "title": "Terminal app",
+        "description": "Use a terminal application as the MVP interface.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m1",
+            "excerpt": "Start with a terminal app and a CSV file."
+          },
+          {
+            "messageId": "m4",
+            "excerpt": "Choose the terminal app; do not build the browser UI for this MVP."
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["red", "user"],
+        "state": "active",
+        "tradeoffs": []
+      },
+      {
+        "id": "proposal-local-browser-ui",
+        "title": "Local browser UI",
+        "description": "Use a local browser interface instead of a terminal app.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m2",
+            "excerpt": "A browser interface could make it easier to show the catalog at the swap. I propose a local browser UI instead of a terminal app."
+          },
+          {
+            "messageId": "m4",
+            "excerpt": "do not build the browser UI for this MVP."
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["yellow"],
+        "state": "active",
+        "tradeoffs": [],
+        "intendedBenefit": "Could make it easier to show the catalog at the swap."
+      },
+      {
+        "id": "context-shared-offline-laptop",
+        "title": "Shared offline laptop and terminal familiarity",
+        "description": "At the venue, volunteers use one shared laptop that is offline; both volunteers use terminals.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m4",
+            "excerpt": "One shared laptop, offline at the venue. Both volunteers use terminals."
+          }
+        ],
+        "kind": "context_fact",
+        "statement": "The volunteers share one laptop, it is offline at the venue, and both volunteers use terminals.",
+        "verification": "user_reported",
+        "status": "current"
+      },
+      {
+        "id": "proposal-sqlite-storage",
+        "title": "SQLite storage",
+        "description": "Use SQLite for book and reservation storage, prioritizing consistent reservation updates.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Change the storage choice to SQLite instead of CSV. Correct reservation updates matter more than editing a spreadsheet."
+          },
+          {
+            "messageId": "m11",
+            "excerpt": "I support SQLite for consistent reservations"
+          },
+          {
+            "messageId": "m12",
+            "excerpt": "I revise my CSV recommendation: I now support SQLite because the user prioritizes reservation correctness."
+          },
+          {
+            "messageId": "m5",
+            "excerpt": "SQLite could keep book and reservation updates consistent."
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["blue", "red", "user"],
+        "state": "active",
+        "tradeoffs": [],
+        "intendedBenefit": "Keep book and reservation updates consistent."
+      },
+      {
+        "id": "data-book-record",
+        "title": "Book record",
+        "description": "Book data includes title, author, and availability.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m6",
+            "excerpt": "Store book title, author, and availability"
+          }
+        ],
+        "kind": "implementation_entity",
+        "subtype": "data_entity",
+        "adoptionState": "confirmed",
+        "fieldsMentioned": ["author", "availability", "title"],
+        "dataDescription": "A book and its availability.",
+        "storageOrFormat": "SQLite"
+      },
+      {
+        "id": "data-reservation-record",
+        "title": "Reservation record",
+        "description": "A reservation records a neighbor's name and the reserved book.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m6",
+            "excerpt": "a reservation records a neighbor's name and book."
+          }
+        ],
+        "kind": "implementation_entity",
+        "subtype": "data_entity",
+        "adoptionState": "confirmed",
+        "fieldsMentioned": ["book", "neighbor's name"],
+        "dataDescription": "A reservation associating a neighbor's name with a book.",
+        "storageOrFormat": "SQLite"
+      },
+      {
+        "id": "req-single-app-instance",
+        "title": "Run one local app instance at a time",
+        "description": "Only one app instance may run at a time.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Keep one local app instance"
+          },
+          {
+            "messageId": "m7",
+            "excerpt": "Run only one app instance at a time."
+          }
+        ],
+        "kind": "requirement",
+        "requirementKind": "other",
+        "priority": "unspecified",
+        "state": "confirmed",
+        "acceptanceCriteria": ["Only one local app instance runs at a time."]
+      },
+      {
+        "id": "workflow-book-swap",
+        "title": "Donation and reservation workflow",
+        "description": "The discussed workflow records donations, lists available books, and reserves a book.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m12",
+            "excerpt": "A donation-entry command and reservation command implement the agreed workflow."
+          },
+          {
+            "messageId": "m7",
+            "excerpt": "First record donations, then list available books, then reserve a book."
+          }
+        ],
+        "kind": "implementation_entity",
+        "subtype": "workflow",
+        "adoptionState": "proposed",
+        "steps": [
+          {
+            "stepId": "workflow-book-swap-step-1",
+            "label": "Record donations",
+            "order": 1,
+            "sourceRefs": [
+              {
+                "messageId": "m7",
+                "excerpt": "First record donations"
+              }
+            ]
+          },
+          {
+            "stepId": "workflow-book-swap-step-2",
+            "label": "List available books",
+            "order": 2,
+            "sourceRefs": [
+              {
+                "messageId": "m7",
+                "excerpt": "then list available books"
+              }
+            ]
+          },
+          {
+            "stepId": "workflow-book-swap-step-3",
+            "label": "Reserve a book",
+            "order": 3,
+            "sourceRefs": [
+              {
+                "messageId": "m7",
+                "excerpt": "then reserve a book."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "proposal-delete-names-after-collection",
+        "title": "Delete reservation names after collection",
+        "description": "Delete reservation names after the reserved book has been collected.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m8",
+            "excerpt": "I propose deleting reservation names after collection."
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["green"],
+        "state": "active",
+        "tradeoffs": []
+      },
+      {
+        "id": "question-name-retention-policy",
+        "title": "Reservation-name retention policy",
+        "description": "Determine how long reservation names are retained and whether they are deleted after collection.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m13",
+            "excerpt": "I have not decided the name-retention policy either."
+          },
+          {
+            "messageId": "m8",
+            "excerpt": "A deletion policy needs to be decided; I propose deleting reservation names after collection."
+          }
+        ],
+        "kind": "open_question",
+        "question": "What is the reservation-name retention and deletion policy?",
+        "state": "open",
+        "blocking": "unknown",
+        "relatedObjectIds": ["data-reservation-record"],
+        "answerSourceRefs": []
+      },
+      {
+        "id": "decision-barcode-scanning",
+        "title": "Barcode scanning in the MVP",
+        "description": "Determine whether barcode scanning is included in the MVP.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Barcode scanning is deferred until after the MVP."
+          },
+          {
+            "messageId": "m9",
+            "excerpt": "Barcode scanning could be a later convenience, but it has not been requested."
+          }
+        ],
+        "kind": "decision",
+        "question": "Should barcode scanning be included in the MVP?",
+        "category": "feature",
+        "state": "deferred",
+        "options": [
+          {
+            "proposalId": "proposal-barcode-scanning",
+            "disposition": "deferred",
+            "dispositionSourceRefs": [
+              {
+                "messageId": "m10",
+                "excerpt": "Barcode scanning is deferred until after the MVP."
+              }
+            ]
+          }
+        ],
+        "authority": "explicit_user",
+        "history": [
+          {
+            "sequence": 10,
+            "changeType": "deferred",
+            "authority": "explicit_user",
+            "sourceRefs": [
+              {
+                "messageId": "m10",
+                "excerpt": "Barcode scanning is deferred until after the MVP."
+              }
+            ]
+          }
+        ],
+        "selectionMode": "single",
+        "unresolvedReason": "Deferred until after the MVP."
+      },
+      {
+        "id": "proposal-barcode-scanning",
+        "title": "Barcode scanning",
+        "description": "Add barcode scanning as a convenience feature.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Barcode scanning is deferred until after the MVP."
+          },
+          {
+            "messageId": "m9",
+            "excerpt": "Barcode scanning could be a later convenience, but it has not been requested."
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["yellow"],
+        "state": "active",
+        "tradeoffs": [],
+        "intendedBenefit": "A later convenience."
+      },
+      {
+        "id": "req-title-search",
+        "title": "Search books by title",
+        "description": "Include a title search capability.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "include title search."
+          },
+          {
+            "messageId": "m9",
+            "excerpt": "I support a search command to find titles quickly."
+          }
+        ],
+        "kind": "requirement",
+        "requirementKind": "functional",
+        "priority": "unspecified",
+        "state": "confirmed",
+        "acceptanceCriteria": ["Users can search for titles."]
+      },
+      {
+        "id": "technology-sqlite",
+        "title": "SQLite",
+        "description": "SQLite is the selected storage technology for the MVP.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Change the storage choice to SQLite instead of CSV."
+          }
+        ],
+        "kind": "implementation_entity",
+        "subtype": "technology",
+        "adoptionState": "confirmed",
+        "technologyName": "SQLite",
+        "intendedUse": "Store book and reservation data."
+      },
+      {
+        "id": "decision-backup-command",
+        "title": "Include a backup command",
+        "description": "Determine whether to include a backup command in the tool.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m11",
+            "excerpt": "I propose a backup command; the backup location is still unknown."
+          },
+          {
+            "messageId": "m13",
+            "excerpt": "Include a backup command"
+          }
+        ],
+        "kind": "decision",
+        "question": "Should the tool include a backup command?",
+        "category": "feature",
+        "state": "resolved",
+        "options": [
+          {
+            "proposalId": "proposal-backup-command",
+            "disposition": "selected",
+            "dispositionSourceRefs": [
+              {
+                "messageId": "m13",
+                "excerpt": "Include a backup command"
+              }
+            ]
+          }
+        ],
+        "authority": "explicit_user",
+        "history": [
+          {
+            "sequence": 13,
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [
+              {
+                "messageId": "m13",
+                "excerpt": "Include a backup command"
+              }
+            ],
+            "selectedProposalId": "proposal-backup-command"
+          }
+        ],
+        "selectedProposalId": "proposal-backup-command",
+        "selectionMode": "single"
+      },
+      {
+        "id": "proposal-backup-command",
+        "title": "Backup command",
+        "description": "Provide a command to create a backup.",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m11",
+            "excerpt": "I propose a backup command"
+          },
+          {
+            "messageId": "m13",
+            "excerpt": "Include a backup command"
+          }
+        ],
+        "kind": "proposal",
+        "proposedBy": ["blue", "user"],
+        "state": "active",
+        "tradeoffs": []
+      },
+      {
+        "id": "question-backup-location",
+        "title": "Backup location",
+        "description": "Determine where the backup command should place backups.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m11",
+            "excerpt": "the backup location is still unknown."
+          },
+          {
+            "messageId": "m13",
+            "excerpt": "leave the backup location undecided."
+          }
+        ],
+        "kind": "open_question",
+        "question": "Where should backups be stored?",
+        "state": "open",
+        "blocking": "unknown",
+        "relatedObjectIds": ["proposal-backup-command"],
+        "answerSourceRefs": []
+      },
+      {
+        "id": "req-no-cloud-sync",
+        "title": "No cloud sync",
+        "description": "Do not add cloud synchronization.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m13",
+            "excerpt": "Do not add cloud sync."
+          }
+        ],
+        "kind": "requirement",
+        "requirementKind": "functional",
+        "priority": "unspecified",
+        "state": "confirmed",
+        "acceptanceCriteria": ["The tool does not include cloud sync."]
+      }
+    ],
+    "annotations": [
+      {
+        "id": "ann-red-terminal-practical",
+        "agent": "red",
+        "targetObjectId": "proposal-terminal-app",
+        "stance": "support",
+        "reasoning": "Recommends starting with a terminal app and considers the four-week delivery practical given the small scope.",
+        "conditions": [
+          "The assessment is tied to the small scope and four-week delivery."
+        ],
+        "sourceRefs": [
+          {
+            "messageId": "m1",
+            "excerpt": "Start with a terminal app and a CSV file. The small scope makes a four-week delivery practical."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-yellow-browser-catalog",
+        "agent": "yellow",
+        "targetObjectId": "proposal-local-browser-ui",
+        "stance": "support",
+        "reasoning": "Favors a local browser UI because it could make the catalog easier to show at the swap.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m2",
+            "excerpt": "A browser interface could make it easier to show the catalog at the swap."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-green-interface-question",
+        "agent": "green",
+        "targetObjectId": "decision-interface",
+        "stance": "question",
+        "reasoning": "Asked about volunteers sharing a computer and their comfort using a terminal before recommending an interface.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m3",
+            "excerpt": "QUESTION: Will volunteers share one computer, and are they comfortable using a terminal?"
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-blue-csv-risk",
+        "agent": "blue",
+        "targetObjectId": "proposal-csv-storage",
+        "stance": "concern",
+        "reasoning": "Warned that careless edits could corrupt reservations in CSV, while noting that CSV is easy to inspect.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m5",
+            "excerpt": "CSV is easy to inspect but reservations can be corrupted by careless edits."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-blue-sqlite-consistency",
+        "agent": "blue",
+        "targetObjectId": "proposal-sqlite-storage",
+        "stance": "support",
+        "reasoning": "Supports SQLite because it could keep book and reservation updates consistent.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m5",
+            "excerpt": "SQLite could keep book and reservation updates consistent."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-blue-storage-question",
+        "agent": "blue",
+        "targetObjectId": "decision-storage",
+        "stance": "question",
+        "reasoning": "Asked which storage approach should be used.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m5",
+            "excerpt": "QUESTION: Which storage approach should we use?"
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-red-csv-support",
+        "agent": "red",
+        "targetObjectId": "proposal-csv-storage",
+        "stance": "support",
+        "reasoning": "Supported CSV because volunteers can inspect it.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m7",
+            "excerpt": "I support CSV because volunteers can inspect it."
+          }
+        ],
+        "state": "revised"
+      },
+      {
+        "id": "ann-green-deletion-proposal",
+        "agent": "green",
+        "targetObjectId": "proposal-delete-names-after-collection",
+        "stance": "support",
+        "reasoning": "Proposed deleting reservation names after collection.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m8",
+            "excerpt": "I propose deleting reservation names after collection."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-green-retention-concern",
+        "agent": "green",
+        "targetObjectId": "question-name-retention-policy",
+        "stance": "concern",
+        "reasoning": "Raised concern about retaining neighbors' names indefinitely and said a deletion policy needs to be decided.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m8",
+            "excerpt": "I am concerned about keeping neighbors' names indefinitely. A deletion policy needs to be decided;"
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-yellow-barcode-alternative",
+        "agent": "yellow",
+        "targetObjectId": "proposal-barcode-scanning",
+        "stance": "neutral",
+        "reasoning": "Described barcode scanning as a possible later convenience and noted it had not been requested.",
+        "conditions": ["Later convenience; not requested."],
+        "sourceRefs": [
+          {
+            "messageId": "m9",
+            "excerpt": "Barcode scanning could be a later convenience, but it has not been requested."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-yellow-title-search",
+        "agent": "yellow",
+        "targetObjectId": "req-title-search",
+        "stance": "support",
+        "reasoning": "Supports a search command to find titles quickly.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m9",
+            "excerpt": "I support a search command to find titles quickly."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-blue-backup-location-unknown",
+        "agent": "blue",
+        "targetObjectId": "proposal-backup-command",
+        "stance": "concern",
+        "reasoning": "Proposed a backup command but identified that its backup location was still unknown.",
+        "conditions": ["Backup location remains unknown."],
+        "sourceRefs": [
+          {
+            "messageId": "m11",
+            "excerpt": "I propose a backup command; the backup location is still unknown."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-blue-sqlite-conditional-test",
+        "agent": "blue",
+        "targetObjectId": "proposal-sqlite-storage",
+        "stance": "conditional",
+        "reasoning": "Supports SQLite for consistent reservations, conditional on testing that a reserved book cannot be reserved again.",
+        "conditions": ["Test that a reserved book cannot be reserved again."],
+        "sourceRefs": [
+          {
+            "messageId": "m11",
+            "excerpt": "I support SQLite for consistent reservations, provided we also test that a reserved book cannot be reserved again."
+          }
+        ],
+        "state": "current"
+      },
+      {
+        "id": "ann-red-revised-sqlite",
+        "agent": "red",
+        "targetObjectId": "proposal-sqlite-storage",
+        "stance": "support",
+        "reasoning": "Revised the earlier CSV recommendation and now supports SQLite because the user prioritizes reservation correctness.",
+        "conditions": ["The user prioritizes reservation correctness."],
+        "sourceRefs": [
+          {
+            "messageId": "m12",
+            "excerpt": "I revise my CSV recommendation: I now support SQLite because the user prioritizes reservation correctness."
+          }
+        ],
+        "state": "current",
+        "revisesAnnotationId": "ann-red-csv-support"
+      },
+      {
+        "id": "ann-red-workflow-commands",
+        "agent": "red",
+        "targetObjectId": "workflow-book-swap",
+        "stance": "support",
+        "reasoning": "Says donation-entry and reservation commands implement the workflow.",
+        "conditions": [],
+        "sourceRefs": [
+          {
+            "messageId": "m12",
+            "excerpt": "A donation-entry command and reservation command implement the agreed workflow."
+          }
+        ],
+        "state": "current"
+      }
+    ],
+    "relationships": [
+      {
+        "id": "rel-backup-decision-proposal",
+        "sourceObjectId": "decision-backup-command",
+        "targetObjectId": "proposal-backup-command",
+        "relation": "selects",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m13",
+            "excerpt": "Include a backup command"
+          }
+        ]
+      },
+      {
+        "id": "rel-data-book-sqlite",
+        "sourceObjectId": "data-book-record",
+        "targetObjectId": "technology-sqlite",
+        "relation": "uses",
+        "origin": "conversation_inferred",
+        "sourceRefs": [
+          {
+            "messageId": "m6",
+            "excerpt": "Store book title, author, and availability"
+          }
+        ],
+        "description": "Book data is stored with the selected storage approach."
+      },
+      {
+        "id": "rel-data-reservation-sqlite",
+        "sourceObjectId": "data-reservation-record",
+        "targetObjectId": "technology-sqlite",
+        "relation": "uses",
+        "origin": "conversation_inferred",
+        "sourceRefs": [
+          {
+            "messageId": "m6",
+            "excerpt": "a reservation records a neighbor's name and book."
+          }
+        ],
+        "description": "Reservation data is stored with the selected storage approach."
+      },
+      {
+        "id": "rel-decision-interface-selects-terminal",
+        "sourceObjectId": "decision-interface",
+        "targetObjectId": "proposal-terminal-app",
+        "relation": "selects",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m4",
+            "excerpt": "Choose the terminal app; do not build the browser UI for this MVP."
+          }
+        ]
+      },
+      {
+        "id": "rel-decision-storage-selects-sqlite",
+        "sourceObjectId": "decision-storage",
+        "targetObjectId": "proposal-sqlite-storage",
+        "relation": "selects",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Change the storage choice to SQLite instead of CSV."
+          }
+        ]
+      },
+      {
+        "id": "rel-name-policy-reservation",
+        "sourceObjectId": "question-name-retention-policy",
+        "targetObjectId": "data-reservation-record",
+        "relation": "affects",
+        "origin": "conversation_inferred",
+        "sourceRefs": [
+          {
+            "messageId": "m8",
+            "excerpt": "I am concerned about keeping neighbors' names indefinitely."
+          }
+        ]
+      },
+      {
+        "id": "rel-sqlite-technology-proposal",
+        "sourceObjectId": "proposal-sqlite-storage",
+        "targetObjectId": "technology-sqlite",
+        "relation": "implements",
+        "origin": "conversation_inferred",
+        "sourceRefs": [
+          {
+            "messageId": "m10",
+            "excerpt": "Change the storage choice to SQLite instead of CSV."
+          }
+        ],
+        "description": "The SQLite storage proposal corresponds to the selected SQLite technology."
+      },
+      {
+        "id": "rel-terminal-option-browser",
+        "sourceObjectId": "proposal-terminal-app",
+        "targetObjectId": "proposal-local-browser-ui",
+        "relation": "conflicts_with",
+        "origin": "agent_explicit",
+        "sourceRefs": [
+          {
+            "messageId": "m2",
+            "excerpt": "I propose a local browser UI instead of a terminal app."
+          }
+        ],
+        "description": "The alternatives propose different MVP interfaces."
+      },
+      {
+        "id": "rel-workflow-book-record",
+        "sourceObjectId": "workflow-book-swap",
+        "targetObjectId": "data-book-record",
+        "relation": "uses",
+        "origin": "conversation_inferred",
+        "sourceRefs": [
+          {
+            "messageId": "m7",
+            "excerpt": "First record donations, then list available books, then reserve a book."
+          }
+        ]
+      },
+      {
+        "id": "rel-workflow-reservation-record",
+        "sourceObjectId": "workflow-book-swap",
+        "targetObjectId": "data-reservation-record",
+        "relation": "uses",
+        "origin": "conversation_inferred",
+        "sourceRefs": [
+          {
+            "messageId": "m7",
+            "excerpt": "then reserve a book."
+          }
+        ]
+      }
+    ],
+    "warnings": []
+  },
+  "objectRedirects": []
+}

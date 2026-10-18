@@ -10,3 +10,4 @@ coverage/
 i4s-exports/
 .vscode/*
 .idle-preview/
+/local-sessions

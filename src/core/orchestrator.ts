@@ -142,6 +142,8 @@ export class Orchestrator {
   #notice: string | undefined;
   #lastTurn: RoomSnapshot['lastTurn'];
   #callsUsed = 0;
+  #reservedCalls = 0;
+  #freezePausedOutput = false;
   #callLimit: number;
   readonly #compactAtTokens: number;
   readonly #keepTokens: number;
@@ -393,10 +395,47 @@ export class Orchestrator {
     return true;
   }
 
-  pause(): void {
+  pause(options: { freezeCurrent?: boolean } = {}): void {
+    // Ordinary pause lets the current speaker finish. A drawing snapshot must
+    // hold even that speaker until explicit resume, including an already-paused room.
+    if (options.freezeCurrent) this.#freezePausedOutput = true;
     if (this.#mode !== 'running' && this.#mode !== 'awaiting-user') return;
     this.#resumeTo = this.#mode;
     this.#setMode('paused');
+  }
+
+  /** Reserve a bounded user-triggered workflow against the same hard session budget. */
+  reserveExternalCalls(limit: number): {
+    recordCall: () => void;
+    release: () => void;
+  } {
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit <= 0 ||
+      this.#mode !== 'paused' ||
+      this.#disposed
+    )
+      throw new Error('Pause the room before drawing.');
+    if (this.#callsUsed + this.#reservedCalls + limit > this.#callLimit)
+      throw new Error(
+        `Drawing needs ${limit} available calls. Add calls with /budget <calls>, then /draw.`,
+      );
+    this.#reservedCalls += limit;
+    let remaining = limit;
+    return {
+      recordCall: () => {
+        if (remaining <= 0)
+          throw new Error('Drawing exceeded its reserved call budget.');
+        remaining--;
+        this.#reservedCalls--;
+        this.#callsUsed++;
+        this.#changed();
+      },
+      release: () => {
+        this.#reservedCalls -= remaining;
+        remaining = 0;
+      },
+    };
   }
 
   /** Returns false when the usage limit still blocks progress. */
@@ -404,6 +443,7 @@ export class Orchestrator {
     if (this.#disposed) return false;
     if (this.#mode !== 'paused') return true;
     if (this.#callsUsed >= this.#callLimit) return false;
+    this.#freezePausedOutput = false;
     this.#notice = undefined;
     this.#setMode(this.#resumeTo);
     this.#startFollowups();
@@ -1056,7 +1096,11 @@ export class Orchestrator {
             continue;
           }
           this.#shutdown.signal.throwIfAborted();
-          if (attempt > 1 || this.#callsUsed < this.#callLimit) break;
+          if (
+            attempt > 1 ||
+            this.#callsUsed + this.#reservedCalls < this.#callLimit
+          )
+            break;
           this.#notice = 'Usage limit reached. Raise the limit to continue.';
           this.pause();
         }
@@ -1069,9 +1113,17 @@ export class Orchestrator {
           signal: this.#shutdown.signal,
         })) {
           this.#shutdown.signal.throwIfAborted();
+          await this.#until(
+            () => this.#mode !== 'paused' || !this.#freezePausedOutput,
+          );
+          this.#shutdown.signal.throwIfAborted();
           started = true;
           yield chunk;
         }
+        await this.#until(
+          () => this.#mode !== 'paused' || !this.#freezePausedOutput,
+        );
+        this.#shutdown.signal.throwIfAborted();
         return;
       } catch (error) {
         if (

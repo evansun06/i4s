@@ -7,7 +7,13 @@ import tseslint from 'typescript-eslint';
 
 export default defineConfig(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', '.idle-preview/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      '.idle-preview/**',
+      'excalidraw-pipeline/**',
+    ],
   },
   {
     files: ['**/*.{ts,tsx,mjs}'],

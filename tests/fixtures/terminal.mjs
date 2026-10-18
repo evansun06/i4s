@@ -8,6 +8,10 @@ import { ChatController } from '../../dist/ui/controller.js';
 import { Orchestrator } from '../../dist/core/orchestrator.js';
 import { panel } from '../../dist/agents/panel.js';
 import { loadSprites } from '../../dist/ui/sprites.js';
+import { createDrawingPipeline } from '../../dist/drawing/pipeline.js';
+import { mkdtemp, mkdir, copyFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const provider = {
   async *generate(request) {
@@ -30,7 +34,36 @@ const provider = {
   },
 };
 const engine = new Orchestrator({ agents: panel, provider, callLimit: 100 });
-const controller = new ChatController(engine, { wordsPerMinute: 800 });
+const temporary = await mkdtemp(join(tmpdir(), 'i4s-terminal-draw-'));
+const pipelineDirectory = join(temporary, 'pipeline');
+await mkdir(join(pipelineDirectory, 'src'), { recursive: true });
+await writeFile(
+  join(pipelineDirectory, 'package.json'),
+  JSON.stringify({ type: 'module' }),
+);
+await copyFile(
+  new URL('./draw-pipeline.mjs', import.meta.url),
+  join(pipelineDirectory, 'src/cli.ts'),
+);
+const sessionFile = join(temporary, 'session.json');
+const controller = new ChatController(engine, {
+  wordsPerMinute: 800,
+  save: async () => {
+    await writeFile(
+      sessionFile,
+      JSON.stringify({
+        version: 1,
+        title: 'terminal-demo',
+        discussion: engine.save(),
+      }),
+    );
+  },
+  draw: createDrawingPipeline({
+    sessionFile,
+    outputDirectory: join(temporary, 'runs'),
+    pipelineDirectory,
+  }),
+});
 try {
   await render(
     React.createElement(App, {

@@ -4,6 +4,16 @@ import type { AgentId, RoomSnapshot } from '../core/types.js';
 import { helpText, parseCommand } from './commands.js';
 import { messageText } from './message-text.js';
 import { Pacer, type Utterance } from './pacer.js';
+import {
+  DRAW_CALL_LIMIT,
+  type DrawPipeline,
+  type DrawingResult,
+} from '../drawing/maps.js';
+
+export type DrawingState =
+  | { readonly status: 'running'; readonly message: string }
+  | { readonly status: 'ready'; readonly result: DrawingResult }
+  | { readonly status: 'failed'; readonly message: string };
 
 export interface ChatMessage {
   readonly key: number;
@@ -12,6 +22,7 @@ export interface ChatMessage {
   eventId?: number;
   complete: boolean;
   failed?: boolean;
+  readonly link?: { readonly label: string; readonly url: string };
 }
 
 export interface PendingInput {
@@ -30,6 +41,7 @@ export interface PresentationSnapshot {
   readonly waiting: readonly AgentId[];
   readonly question: RoomSnapshot['pendingQuestion'];
   readonly closing: boolean;
+  readonly drawing?: DrawingState;
   /** Playback speed; 0 shows replies instantly. */
   readonly wordsPerMinute: number;
 }
@@ -44,6 +56,7 @@ export function nextReadingSpeed(current: number, direction: 1 | -1): number {
   const { step, min, max } = READING_SPEED;
   if (current === 0) return direction > 0 ? 0 : max;
   return Math.max(min, Math.min(max, current + direction * step));
+
 }
 
 export class ChatController {
@@ -53,6 +66,10 @@ export class ChatController {
   readonly #pacer: Pacer;
   readonly #unsubscribe: (() => void)[];
   readonly #save: () => Promise<void>;
+  readonly #draw: DrawPipeline | undefined;
+  #drawing: DrawingState | undefined;
+  #drawAbort: AbortController | undefined;
+  #drawTask: Promise<void> | undefined;
   #saveChain = Promise.resolve();
   #batch = false;
   #closing = false;
@@ -76,9 +93,11 @@ export class ChatController {
     options: {
       wordsPerMinute: number;
       save?: () => Promise<void>;
+      draw?: DrawPipeline;
     },
   ) {
     this.#save = options.save ?? (() => Promise.resolve());
+    this.#draw = options.draw;
     this.#pacer = new Pacer(() => {}, {
       wordsPerMinute: options.wordsPerMinute,
       pauseBetweenSpeakersMs: options.wordsPerMinute ? 1000 : 0,
@@ -137,6 +156,7 @@ export class ChatController {
           ? question
           : undefined,
       closing: this.#closing,
+      ...(this.#drawing && { drawing: this.#drawing }),
       wordsPerMinute: this.#pacer.wordsPerMinute,
     };
     return this.#snapshot;
@@ -208,12 +228,13 @@ export class ChatController {
     this.#stream = undefined;
   }
 
-  #system(text: string): void {
+  #system(text: string, link?: ChatMessage['link']): void {
     this.#messages.push({
       key: this.#key++,
       speaker: 'system',
       text,
       complete: true,
+      ...(link ? { link } : {}),
     });
     this.#changed();
   }
@@ -251,8 +272,17 @@ export class ChatController {
         this.engine.pause();
         break;
       case 'resume':
+        if (this.#drawTask) {
+          this.#system(
+            'Maps are still generating. The room stays paused until drawing finishes.',
+          );
+          break;
+        }
         if (!this.engine.resume())
           this.#system('Add calls with /budget <calls>, then /resume.');
+        break;
+      case 'draw':
+        this.#startDrawing();
         break;
       case 'budget':
         try {
@@ -320,6 +350,78 @@ export class ChatController {
     });
   }
 
+  dismissDrawing(): void {
+    if (this.#drawing?.status !== 'ready') return;
+    this.#drawing = undefined;
+    this.#changed();
+  }
+
+  #startDrawing(): void {
+    if (this.#drawTask) {
+      this.#system('Maps are already generating; no second run was started.');
+      return;
+    }
+    const draw = this.#draw;
+    if (!draw) {
+      this.#system('Drawing is not configured for this session.');
+      return;
+    }
+    if (!this.engine.bus.log.some((event) => event.kind === 'user-message')) {
+      this.#system('Start a conversation before using /draw.');
+      return;
+    }
+    this.#drawing = {
+      status: 'running',
+      message: 'Saving the current conversation…',
+    };
+    this.engine.pause({ freezeCurrent: true });
+    const abort = new AbortController();
+    this.#drawAbort = abort;
+    this.#drawTask = Promise.resolve().then(async () => {
+      let reservation:
+        ReturnType<Orchestrator['reserveExternalCalls']> | undefined;
+      try {
+        reservation = this.engine.reserveExternalCalls(DRAW_CALL_LIMIT);
+        await this.#persist(true);
+        abort.signal.throwIfAborted();
+        const result = await draw({
+          signal: abort.signal,
+          onCall: reservation.recordCall,
+          onProgress: (message) => {
+            if (this.#closing) return;
+            this.#drawing = { status: 'running', message };
+            this.#changed();
+          },
+        });
+        if (!this.#closing) {
+          this.#drawing = { status: 'ready', result };
+          this.#system(
+            `Maps saved: ${result.filePath}\nThe room remains paused. /resume continues the discussion.`,
+            {
+              label: 'Go online to edit',
+              url: result.editUrl ?? 'https://excalidraw.com',
+            },
+          );
+        }
+      } catch (error) {
+        if (!this.#closing) {
+          const message =
+            error instanceof Error ? error.message : 'Drawing failed.';
+          this.#drawing = { status: 'failed', message };
+          this.#system(
+            `${message}\nThe room remains paused. Use /draw to retry or /resume to continue.`,
+          );
+        }
+      } finally {
+        reservation?.release();
+        this.#drawTask = undefined;
+        this.#drawAbort = undefined;
+        this.#changed();
+      }
+    });
+    this.#changed();
+  }
+
   async #drain(): Promise<void> {
     if (this.#closing || this.#batch) return;
     const room = this.engine.snapshot();
@@ -356,24 +458,26 @@ export class ChatController {
     }
   }
 
-  #persist(): Promise<void> {
-    this.#saveChain = this.#saveChain
-      .then(this.#save)
-      .catch((error: unknown) => {
-        this.#system(
-          `Could not save: ${error instanceof Error ? error.message : 'unknown error'}`,
-        );
-      });
-    return this.#saveChain;
+  #persist(strict = false): Promise<void> {
+    const operation = this.#saveChain.then(this.#save);
+    this.#saveChain = operation.catch((error: unknown) => {
+      this.#system(
+        `Could not save: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    });
+    return strict ? operation : this.#saveChain;
   }
 
   async close(): Promise<void> {
     if (this.#closing) return;
     this.#closing = true;
+    this.#drawAbort?.abort();
     for (const unsubscribe of this.#unsubscribe) unsubscribe();
     this.engine.dispose();
     this.#pacer.dispose();
     this.#changed();
+    await this.#drawTask;
+    await this.#draw?.close?.();
     await this.#saveChain;
     await this.#save();
     this.#listeners.clear();

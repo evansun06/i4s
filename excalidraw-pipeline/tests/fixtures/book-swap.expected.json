@@ -1,0 +1,818 @@
+{
+  "knowledgeGraph": {
+    "schemaVersion": "1.0",
+    "conversationId": "conversation-23c93077d648565a",
+    "snapshotSequence": 13,
+    "objects": [
+      {
+        "id": "goal_swap",
+        "kind": "goal",
+        "title": "Neighborhood book swap",
+        "description": "Volunteers record donations and reserve books for neighbors.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m0" }],
+        "priority": "unspecified",
+        "successCriteria": [],
+        "state": "active"
+      },
+      {
+        "id": "constraint_budget",
+        "kind": "constraint",
+        "title": "Total budget",
+        "description": "The total budget is $100.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m0" }],
+        "constraintKind": "budget",
+        "flexibility": "hard",
+        "expression": "$100 total",
+        "value": 100,
+        "unit": "USD",
+        "appliesToObjectIds": ["goal_swap"]
+      },
+      {
+        "id": "constraint_time",
+        "kind": "constraint",
+        "title": "Four-week delivery",
+        "description": "Complete the MVP in four weeks.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m0" }],
+        "constraintKind": "time",
+        "flexibility": "hard",
+        "expression": "four weeks",
+        "value": 4,
+        "unit": "weeks",
+        "appliesToObjectIds": ["goal_swap"]
+      },
+      {
+        "id": "context_volunteers",
+        "kind": "context_fact",
+        "title": "Two volunteers",
+        "description": "Two volunteers use one shared laptop and both know terminals.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m0" }, { "messageId": "m4" }],
+        "statement": "Two terminal-capable volunteers share one laptop.",
+        "verification": "user_reported",
+        "status": "current"
+      },
+      {
+        "id": "constraint_local",
+        "kind": "constraint",
+        "title": "Local operation",
+        "description": "Work offline on the shared laptop with one app instance and no cloud sync.",
+        "origin": "user_explicit",
+        "sourceRefs": [
+          { "messageId": "m4" },
+          { "messageId": "m10" },
+          { "messageId": "m13" }
+        ],
+        "constraintKind": "platform",
+        "flexibility": "hard",
+        "expression": "One local app instance, offline, no cloud sync",
+        "appliesToObjectIds": ["goal_swap"]
+      },
+      {
+        "id": "constraint_scope",
+        "kind": "constraint",
+        "title": "MVP exclusions",
+        "description": "No accounts or payment processing in the MVP.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m0" }],
+        "constraintKind": "scope",
+        "flexibility": "hard",
+        "expression": "No accounts or payment processing",
+        "appliesToObjectIds": ["goal_swap"]
+      },
+      {
+        "id": "proposal_terminal",
+        "kind": "proposal",
+        "title": "Terminal app",
+        "description": "Use a terminal interface.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m1" }],
+        "proposedBy": ["red"],
+        "state": "active",
+        "tradeoffs": [],
+        "intendedBenefit": "Keep delivery within the small scope."
+      },
+      {
+        "id": "proposal_browser",
+        "kind": "proposal",
+        "title": "Local browser UI",
+        "description": "Use a local browser interface.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m2" }],
+        "proposedBy": ["yellow"],
+        "state": "active",
+        "tradeoffs": [],
+        "intendedBenefit": "Show the catalog easily at the swap."
+      },
+      {
+        "id": "decision_interface",
+        "kind": "decision",
+        "title": "Interface choice",
+        "description": "The user chose a terminal app and rejected browser UI for the MVP.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m4" }],
+        "question": "Which interface should the MVP use?",
+        "category": "architecture",
+        "state": "resolved",
+        "options": [
+          {
+            "proposalId": "proposal_terminal",
+            "disposition": "selected",
+            "dispositionSourceRefs": [{ "messageId": "m4" }]
+          },
+          {
+            "proposalId": "proposal_browser",
+            "disposition": "explicitly_rejected",
+            "dispositionSourceRefs": [{ "messageId": "m4" }]
+          }
+        ],
+        "selectedProposalId": "proposal_terminal",
+        "authority": "explicit_user",
+        "history": [
+          {
+            "sequence": 4,
+            "selectedProposalId": "proposal_terminal",
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [{ "messageId": "m4" }]
+          }
+        ]
+      },
+      {
+        "id": "proposal_csv",
+        "kind": "proposal",
+        "title": "CSV storage",
+        "description": "Store the local data in CSV files.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m1" }],
+        "proposedBy": ["red"],
+        "state": "active",
+        "tradeoffs": ["Careless edits can corrupt reservations."]
+      },
+      {
+        "id": "proposal_sqlite",
+        "kind": "proposal",
+        "title": "SQLite storage",
+        "description": "Keep book and reservation updates consistent in SQLite.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m5" }],
+        "proposedBy": ["blue"],
+        "state": "active",
+        "tradeoffs": []
+      },
+      {
+        "id": "decision_storage",
+        "kind": "decision",
+        "title": "Storage choice",
+        "description": "The user initially selected CSV and later switched to SQLite.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m6" }, { "messageId": "m10" }],
+        "question": "How should books and reservations be stored?",
+        "category": "architecture",
+        "state": "resolved",
+        "options": [
+          {
+            "proposalId": "proposal_csv",
+            "disposition": "not_selected",
+            "dispositionSourceRefs": [{ "messageId": "m10" }]
+          },
+          {
+            "proposalId": "proposal_sqlite",
+            "disposition": "selected",
+            "dispositionSourceRefs": [{ "messageId": "m10" }]
+          }
+        ],
+        "selectedProposalId": "proposal_sqlite",
+        "authority": "explicit_user",
+        "history": [
+          {
+            "sequence": 6,
+            "selectedProposalId": "proposal_csv",
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [{ "messageId": "m6" }]
+          },
+          {
+            "sequence": 10,
+            "selectedProposalId": "proposal_sqlite",
+            "changeType": "selected",
+            "authority": "explicit_user",
+            "sourceRefs": [{ "messageId": "m10" }]
+          }
+        ]
+      },
+      {
+        "id": "entity_terminal",
+        "kind": "implementation_entity",
+        "subtype": "component",
+        "title": "Terminal app",
+        "description": "Local terminal app used by volunteers.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m4" }],
+        "adoptionState": "confirmed",
+        "responsibility": "Expose donation, catalog, reservation, search and backup commands."
+      },
+      {
+        "id": "entity_sqlite",
+        "kind": "implementation_entity",
+        "subtype": "technology",
+        "title": "SQLite",
+        "description": "The adopted local storage technology.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m10" }],
+        "adoptionState": "confirmed",
+        "technologyName": "SQLite",
+        "intendedUse": "Consistent book and reservation updates."
+      },
+      {
+        "id": "data_book",
+        "kind": "implementation_entity",
+        "subtype": "data_entity",
+        "title": "Book",
+        "description": "A donated book and its availability.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m6" }],
+        "adoptionState": "confirmed",
+        "fieldsMentioned": ["title", "author", "availability"]
+      },
+      {
+        "id": "data_reservation",
+        "kind": "implementation_entity",
+        "subtype": "data_entity",
+        "title": "Reservation",
+        "description": "A neighbor's reservation of a book.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m6" }],
+        "adoptionState": "confirmed",
+        "fieldsMentioned": ["neighbor name", "book"]
+      },
+      {
+        "id": "requirement_search",
+        "kind": "requirement",
+        "title": "Title search",
+        "description": "Allow volunteers to search books by title.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m10" }],
+        "requirementKind": "functional",
+        "priority": "unspecified",
+        "state": "confirmed",
+        "acceptanceCriteria": []
+      },
+      {
+        "id": "requirement_backup",
+        "kind": "requirement",
+        "title": "Backup command",
+        "description": "Include a backup command; its destination is still undecided.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m13" }],
+        "requirementKind": "functional",
+        "priority": "unspecified",
+        "state": "confirmed",
+        "acceptanceCriteria": []
+      },
+      {
+        "id": "question_backup",
+        "kind": "open_question",
+        "title": "Backup location",
+        "description": "The user left the backup location undecided.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m13" }],
+        "question": "Where should backups be saved?",
+        "state": "open",
+        "blocking": "unknown",
+        "relatedObjectIds": ["requirement_backup"],
+        "answerSourceRefs": []
+      },
+      {
+        "id": "proposal_retention",
+        "kind": "proposal",
+        "title": "Delete names after collection",
+        "description": "Delete reservation names after the book is collected.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m8" }],
+        "proposedBy": ["green"],
+        "state": "active",
+        "tradeoffs": []
+      },
+      {
+        "id": "decision_retention",
+        "kind": "decision",
+        "title": "Name retention",
+        "description": "The user has not chosen a name-retention policy.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m13" }],
+        "question": "When should reservation names be deleted?",
+        "category": "product",
+        "state": "open",
+        "options": [
+          {
+            "proposalId": "proposal_retention",
+            "disposition": "considered",
+            "dispositionSourceRefs": [{ "messageId": "m8" }]
+          }
+        ],
+        "authority": "not_decided",
+        "history": [],
+        "unresolvedReason": "The user explicitly left the policy undecided."
+      },
+      {
+        "id": "requirement_barcode",
+        "kind": "requirement",
+        "title": "Barcode scanning",
+        "description": "Barcode scanning is deferred until after the MVP.",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m10" }],
+        "requirementKind": "functional",
+        "priority": "unspecified",
+        "state": "deferred",
+        "acceptanceCriteria": []
+      },
+      {
+        "id": "risk_reservations",
+        "kind": "risk",
+        "title": "Reservation corruption",
+        "description": "Careless CSV edits could corrupt reservations.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m5" }],
+        "severity": "unknown",
+        "likelihood": "unknown",
+        "impact": "Book and reservation updates may become inconsistent.",
+        "affectedObjectIds": ["proposal_csv", "data_reservation"],
+        "mitigation": "Use SQLite for consistent updates."
+      },
+      {
+        "id": "workflow_swap",
+        "kind": "implementation_entity",
+        "subtype": "workflow",
+        "title": "Donation to reservation",
+        "description": "Record donations, list available books, then reserve a book.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m7" }],
+        "adoptionState": "proposed",
+        "steps": [
+          {
+            "stepId": "donate",
+            "label": "Record donation",
+            "order": 1,
+            "sourceRefs": [{ "messageId": "m7" }]
+          },
+          {
+            "stepId": "list",
+            "label": "List available books",
+            "order": 2,
+            "sourceRefs": [{ "messageId": "m7" }]
+          },
+          {
+            "stepId": "reserve",
+            "label": "Reserve a book",
+            "order": 3,
+            "sourceRefs": [{ "messageId": "m7" }]
+          }
+        ]
+      },
+      {
+        "id": "question_volunteers",
+        "kind": "open_question",
+        "title": "Volunteer environment",
+        "description": "Green asked about shared hardware and terminal familiarity; the user answered.",
+        "origin": "agent_explicit",
+        "sourceRefs": [{ "messageId": "m3" }],
+        "question": "Will volunteers share one computer and are they comfortable with a terminal?",
+        "state": "answered",
+        "blocking": "unknown",
+        "relatedObjectIds": ["context_volunteers", "decision_interface"],
+        "answerSourceRefs": [{ "messageId": "m4" }]
+      }
+    ],
+    "annotations": [
+      {
+        "id": "a_red_terminal",
+        "agent": "red",
+        "targetObjectId": "proposal_terminal",
+        "stance": "support",
+        "reasoning": "A terminal app keeps scope small for four-week delivery.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m1" }],
+        "state": "current"
+      },
+      {
+        "id": "a_yellow_browser",
+        "agent": "yellow",
+        "targetObjectId": "proposal_browser",
+        "stance": "support",
+        "reasoning": "A browser interface could make showing the catalog easier.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m2" }],
+        "state": "current"
+      },
+      {
+        "id": "a_green_environment",
+        "agent": "green",
+        "targetObjectId": "question_volunteers",
+        "stance": "question",
+        "reasoning": "Volunteer hardware and terminal familiarity should inform the interface choice.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m3" }],
+        "state": "current"
+      },
+      {
+        "id": "a_blue_csv",
+        "agent": "blue",
+        "targetObjectId": "proposal_csv",
+        "stance": "concern",
+        "reasoning": "Careless edits can corrupt reservations.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m5" }],
+        "state": "current"
+      },
+      {
+        "id": "a_red_csv",
+        "agent": "red",
+        "targetObjectId": "proposal_csv",
+        "stance": "support",
+        "reasoning": "Volunteers can inspect the CSV file.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m7" }],
+        "state": "revised"
+      },
+      {
+        "id": "a_red_sqlite",
+        "agent": "red",
+        "targetObjectId": "proposal_sqlite",
+        "stance": "support",
+        "reasoning": "The user prioritizes reservation correctness.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m12" }],
+        "state": "current",
+        "revisesAnnotationId": "a_red_csv"
+      },
+      {
+        "id": "a_blue_sqlite",
+        "agent": "blue",
+        "targetObjectId": "proposal_sqlite",
+        "stance": "conditional",
+        "reasoning": "SQLite supports consistent reservations.",
+        "conditions": ["Test that a reserved book cannot be reserved again."],
+        "sourceRefs": [{ "messageId": "m11" }],
+        "state": "current"
+      },
+      {
+        "id": "a_green_retention",
+        "agent": "green",
+        "targetObjectId": "proposal_retention",
+        "stance": "support",
+        "reasoning": "Avoid keeping neighbors' names indefinitely.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m8" }],
+        "state": "current"
+      },
+      {
+        "id": "a_yellow_search",
+        "agent": "yellow",
+        "targetObjectId": "requirement_search",
+        "stance": "support",
+        "reasoning": "A search command helps find titles quickly.",
+        "conditions": [],
+        "sourceRefs": [{ "messageId": "m9" }],
+        "state": "current"
+      }
+    ],
+    "relationships": [
+      {
+        "id": "r_interface",
+        "sourceObjectId": "decision_interface",
+        "targetObjectId": "proposal_terminal",
+        "relation": "selects",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m4" }]
+      },
+      {
+        "id": "r_storage",
+        "sourceObjectId": "decision_storage",
+        "targetObjectId": "proposal_sqlite",
+        "relation": "selects",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m10" }]
+      },
+      {
+        "id": "r_browser_rejected",
+        "sourceObjectId": "decision_interface",
+        "targetObjectId": "proposal_browser",
+        "relation": "rejects",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m4" }]
+      },
+      {
+        "id": "r_uses",
+        "sourceObjectId": "entity_terminal",
+        "targetObjectId": "entity_sqlite",
+        "relation": "uses",
+        "origin": "user_explicit",
+        "sourceRefs": [{ "messageId": "m10" }]
+      }
+    ],
+    "warnings": [
+      {
+        "id": "w_backup",
+        "kind": "missing_information",
+        "severity": "warning",
+        "message": "Backup location remains undecided.",
+        "relatedObjectIds": ["question_backup"],
+        "sourceRefs": [{ "messageId": "m13" }]
+      },
+      {
+        "id": "w_retention",
+        "kind": "missing_information",
+        "severity": "warning",
+        "message": "Name-retention policy remains undecided; the agent's proposal is not approved.",
+        "relatedObjectIds": ["decision_retention"],
+        "sourceRefs": [{ "messageId": "m13" }]
+      }
+    ]
+  },
+  "decisionGraph": {
+    "nodes": [
+      {
+        "id": "dg_interface",
+        "nodeType": "decision",
+        "title": "Interface choice",
+        "description": "Choose the volunteer interface.",
+        "primaryObjectId": "decision_interface",
+        "justifiedByObjectIds": ["constraint_time", "context_volunteers"],
+        "annotations": []
+      },
+      {
+        "id": "dg_terminal",
+        "nodeType": "option",
+        "title": "Terminal app",
+        "description": "Local terminal interface.",
+        "primaryObjectId": "proposal_terminal",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      },
+      {
+        "id": "dg_browser",
+        "nodeType": "option",
+        "title": "Browser UI",
+        "description": "Local browser interface.",
+        "primaryObjectId": "proposal_browser",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      },
+      {
+        "id": "dg_storage",
+        "nodeType": "decision",
+        "title": "Storage choice",
+        "description": "Choose local storage.",
+        "primaryObjectId": "decision_storage",
+        "justifiedByObjectIds": ["constraint_local", "risk_reservations"],
+        "annotations": []
+      },
+      {
+        "id": "dg_csv",
+        "nodeType": "option",
+        "title": "CSV",
+        "description": "File storage.",
+        "primaryObjectId": "proposal_csv",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      },
+      {
+        "id": "dg_sqlite",
+        "nodeType": "option",
+        "title": "SQLite",
+        "description": "Consistent local updates.",
+        "primaryObjectId": "proposal_sqlite",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      },
+      {
+        "id": "dg_retention",
+        "nodeType": "decision",
+        "title": "Name retention",
+        "description": "Unresolved retention policy.",
+        "primaryObjectId": "decision_retention",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      },
+      {
+        "id": "dg_delete_names",
+        "nodeType": "option",
+        "title": "Delete after collection",
+        "description": "An unapproved proposal.",
+        "primaryObjectId": "proposal_retention",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      }
+    ],
+    "edges": [
+      {
+        "id": "de_terminal",
+        "sourceNodeId": "dg_interface",
+        "targetNodeId": "dg_terminal",
+        "relation": "has_option",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["decision_interface"]
+      },
+      {
+        "id": "de_browser",
+        "sourceNodeId": "dg_interface",
+        "targetNodeId": "dg_browser",
+        "relation": "has_option",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["decision_interface"]
+      },
+      {
+        "id": "de_csv",
+        "sourceNodeId": "dg_storage",
+        "targetNodeId": "dg_csv",
+        "relation": "has_option",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["decision_storage"]
+      },
+      {
+        "id": "de_sqlite",
+        "sourceNodeId": "dg_storage",
+        "targetNodeId": "dg_sqlite",
+        "relation": "has_option",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["decision_storage"]
+      },
+      {
+        "id": "de_retention",
+        "sourceNodeId": "dg_retention",
+        "targetNodeId": "dg_delete_names",
+        "relation": "has_option",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["decision_retention"]
+      }
+    ]
+  },
+  "implementationGraph": {
+    "nodes": [
+      {
+        "id": "ig_app",
+        "nodeType": "component",
+        "title": "Terminal app",
+        "description": "Volunteer commands on the offline shared laptop.",
+        "primaryObjectId": "entity_terminal",
+        "origin": "conversation_explicit",
+        "status": "confirmed",
+        "justifiedByObjectIds": [
+          "decision_interface",
+          "proposal_terminal",
+          "constraint_scope",
+          "constraint_local"
+        ],
+        "annotations": []
+      },
+      {
+        "id": "ig_sqlite",
+        "nodeType": "technology",
+        "title": "SQLite",
+        "description": "Local book and reservation storage.",
+        "primaryObjectId": "entity_sqlite",
+        "origin": "decision_derived",
+        "status": "confirmed",
+        "justifiedByObjectIds": ["decision_storage", "proposal_sqlite"],
+        "annotations": []
+      },
+      {
+        "id": "ig_book",
+        "nodeType": "data_entity",
+        "title": "Book",
+        "description": "Title, author and availability.",
+        "primaryObjectId": "data_book",
+        "origin": "conversation_explicit",
+        "status": "confirmed",
+        "justifiedByObjectIds": [],
+        "annotations": []
+      },
+      {
+        "id": "ig_reservation",
+        "nodeType": "data_entity",
+        "title": "Reservation",
+        "description": "Neighbor name and book; retention policy unresolved.",
+        "primaryObjectId": "data_reservation",
+        "origin": "conversation_explicit",
+        "status": "confirmed",
+        "justifiedByObjectIds": ["decision_retention"],
+        "annotations": []
+      },
+      {
+        "id": "ig_workflow",
+        "nodeType": "workflow",
+        "title": "Donation to reservation",
+        "description": "Record, list and reserve books.",
+        "primaryObjectId": "workflow_swap",
+        "origin": "conversation_explicit",
+        "status": "proposed",
+        "justifiedByObjectIds": ["goal_swap"],
+        "annotations": []
+      },
+      {
+        "id": "ig_search",
+        "nodeType": "task",
+        "title": "Implement title search",
+        "description": "Expose the confirmed title-search capability.",
+        "origin": "planner_derived",
+        "status": "proposed",
+        "justifiedByObjectIds": ["requirement_search"],
+        "annotations": []
+      },
+      {
+        "id": "ig_backup",
+        "nodeType": "task",
+        "title": "Implement backup command",
+        "description": "Implement the requested command after deciding its destination.",
+        "origin": "planner_derived",
+        "status": "proposed",
+        "justifiedByObjectIds": ["requirement_backup", "question_backup"],
+        "annotations": []
+      },
+      {
+        "id": "ig_backup_choice",
+        "nodeType": "task",
+        "title": "Choose backup location",
+        "description": "Ask the user to resolve the open destination question.",
+        "origin": "planner_derived",
+        "status": "undecided",
+        "justifiedByObjectIds": ["question_backup"],
+        "annotations": []
+      },
+      {
+        "id": "ig_reservation_test",
+        "nodeType": "task",
+        "title": "Test duplicate reservation prevention",
+        "description": "Suggested check that a reserved book cannot be reserved again.",
+        "origin": "planner_suggested",
+        "status": "proposed",
+        "justifiedByObjectIds": ["proposal_sqlite", "risk_reservations"],
+        "annotations": []
+      },
+      {
+        "id": "ig_barcode",
+        "nodeType": "task",
+        "title": "Barcode scanning after MVP",
+        "description": "Preserve the deferred scope; do not include it in the current build.",
+        "origin": "planner_derived",
+        "status": "deferred",
+        "justifiedByObjectIds": ["requirement_barcode"],
+        "annotations": []
+      }
+    ],
+    "edges": [
+      {
+        "id": "ie_storage",
+        "sourceNodeId": "ig_app",
+        "targetNodeId": "ig_sqlite",
+        "relation": "uses",
+        "origin": "conversation_explicit",
+        "primaryRelationshipId": "r_uses",
+        "justifiedByObjectIds": ["decision_storage"]
+      },
+      {
+        "id": "ie_books",
+        "sourceNodeId": "ig_app",
+        "targetNodeId": "ig_book",
+        "relation": "uses",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["data_book"]
+      },
+      {
+        "id": "ie_reservations",
+        "sourceNodeId": "ig_app",
+        "targetNodeId": "ig_reservation",
+        "relation": "uses",
+        "origin": "knowledge_derived",
+        "justifiedByObjectIds": ["data_reservation"]
+      },
+      {
+        "id": "ie_search",
+        "sourceNodeId": "ig_search",
+        "targetNodeId": "ig_app",
+        "relation": "implements",
+        "origin": "planner_derived",
+        "justifiedByObjectIds": ["requirement_search"]
+      },
+      {
+        "id": "ie_backup",
+        "sourceNodeId": "ig_backup",
+        "targetNodeId": "ig_app",
+        "relation": "implements",
+        "origin": "planner_derived",
+        "justifiedByObjectIds": ["requirement_backup"]
+      },
+      {
+        "id": "ie_backup_choice",
+        "sourceNodeId": "ig_backup",
+        "targetNodeId": "ig_backup_choice",
+        "relation": "depends_on",
+        "origin": "planner_derived",
+        "justifiedByObjectIds": ["question_backup"]
+      }
+    ]
+  }
+}

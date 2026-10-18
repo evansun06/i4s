@@ -48,16 +48,17 @@ Then pick a new discussion or continue a previous one, and say what you're worki
 - **`@name`** in a message (`@bleu`, `@ruby @jade`) means only those advisors reply that round.
 - **Type while they talk** to queue your next message.
 
-| Command                           | What it does                                                                             |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| `/think [agents] <message>`       | Have advisors think deeply before answering, e.g. `/think bleu how should I price this?` |
-| `/temp [agent\|all] [0–1\|reset]` | Boldness: 0 is generic, 0.5 is normal, 1 is full personality                             |
-| `/new <message>`                  | Set a pending question aside and talk to everyone                                        |
-| `/pause`, `/resume`               | Pause and resume the room                                                                |
-| `/budget <calls>`                 | Raise the call limit for this session                                                    |
-| `/queue`, `/unqueue`              | Show or remove queued messages                                                           |
-| `/help`                           | Commands and keyboard controls                                                           |
-| `/quit`                           | Save and exit                                                                            |
+| Command                           | What it does                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `/think [agents] <message>`       | Have advisors think deeply before answering, e.g. `/think bleu how should I price this?`      |
+| `/temp [agent\|all] [0–1\|reset]` | Boldness: 0 is generic, 0.5 is normal, 1 is full personality                                  |
+| `/new <message>`                  | Set a pending question aside and talk to everyone                                             |
+| `/pause`, `/resume`               | Pause and resume the room                                                                     |
+| `/draw`                           | Pause and generate Decision/Implementation maps from this saved session (repository checkout) |
+| `/budget <calls>`                 | Raise the call limit for this session                                                         |
+| `/queue`, `/unqueue`              | Show or remove queued messages                                                                |
+| `/help`                           | Commands and keyboard controls                                                                |
+| `/quit`                           | Save and exit                                                                                 |
 
 | Key             | What it does                                                                      |
 | --------------- | --------------------------------------------------------------------------------- |
@@ -71,6 +72,61 @@ Then pick a new discussion or continue a previous one, and say what you're worki
 | Ctrl+C          | Save and quit                                                                     |
 
 The reading speed shows in the top bar. Terminals never pass the Command key through to apps, so the speed keys use Ctrl (or Alt) on every platform. While the app is open it handles the mouse wheel itself, so in most terminals hold Shift to select text with the mouse.
+
+## Drawing maps (repository checkout)
+
+From a checkout, install both components with `npm ci` at the repository root and
+`npm ci --prefix excalidraw-pipeline`. Configure `OPENAI_API_KEY` in your shell or
+`excalidraw-pipeline/.env`. Drawing uses the existing OpenAI pipeline and its
+`gpt-6-luna` default, independently of the discussion provider; a saved Gemini or
+Claude key does not configure drawing. The published npm package does not yet
+bundle this experimental pipeline.
+
+In the full TUI, type `/draw`. The app pauses the agents and playback, saves the
+session, and passes that file's `discussion.log` to the pipeline. Only committed
+messages are included; a partial streaming reply is held until you resume.
+Loading text reports the active pipeline stage. Draw calls count against the
+session budget: six available calls are reserved, actual requests are charged,
+and unused capacity is released. `/budget <calls>` can add capacity if needed.
+An unchanged conversation can reuse its previously validated Step 1 extraction;
+the pipeline checks the exact snapshot, specification, model and schema and
+revalidates the saved knowledge before skipping that call. Graphs are still rebuilt
+independently: decisions/options are projected from canonical facts without a model;
+implementation and readable presentation use the LLM. Fresh runs normally use three
+calls; unchanged retries use two. Relationship-category hints are warnings, while
+invalid references, cycles and false commitments still block export. Per-request timings/token counts are saved in
+`timings.json` so slow stages are visible.
+
+When finished, the TUI adds **Go online to edit** directly to the chat, opening
+both maps in excalidraw.com. No separate results screen replaces the discussion.
+The link is a short HTTP address bound only to `127.0.0.1`, not a `file://` link
+that an IDE may open as source code. Each drawing has a random private path; only
+its edit handoff and native drawing download are served, never session logs or
+arbitrary files. Links remain available while this TUI process is open; shutdown
+closes the local listener. `edit.html` and the native file remain saved on disk.
+There is no terminal diagram rendering, image export, or browser process during
+generation. Cmd/Ctrl+click opens links in terminals supporting OSC 8.
+The discussion stays paused on success or failure;
+`/resume` explicitly continues it. Pending questions and queued input are retained.
+Repeated `/draw` commands during generation start no extra calls; Ctrl+C cancels
+generation and saves/exits.
+
+Each run is saved separately under
+`~/.the-idiots/sessions/<session-id>-draws/<run>/`, including
+`project-plan.excalidraw`, `edit.html`, `terminal-maps.json`, and pipeline diagnostics.
+The editor handoff passes only drawing elements through Excalidraw's `#url=data:…`
+importer, with no sharing-service upload or raw conversation. The online app can
+read that drawing, and browser history may retain the URL. Online edits do not
+overwrite local runs. Import the native file manually if a browser blocks the handoff.
+The link needs no additional dependencies or model calls. Old run files are retained.
+The existing standalone pipeline command still works. `/draw` is
+not sent to the discussion agents and is not available in `--plain` mode.
+
+Session storage is `~/.the-idiots/sessions/` (a hidden directory). On macOS, open it
+with `open ~/.the-idiots/sessions`, or use Finder → Go → Go to Folder and paste that
+path. This local checkout also has a visible, Git-ignored `local-sessions` shortcut
+to the same folder, including session JSON and per-session draw results. It does
+not copy or move your data, and is not included in commits or other checkouts.
 
 ## Options
 
