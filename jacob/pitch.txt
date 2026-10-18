@@ -1,0 +1,202 @@
+THE IDIOTS — HACKATHON PITCH NOTES
+Four perspectives. One discussion. Your decision.
+(Accurate as of main @ 6bd09ae, Oct 2026.)
+
+
+==============================================================
+1. THE ONE-LINER
+==============================================================
+A terminal app where four AI advisors talk your problem through
+with you AND with each other, like a real meeting, instead of one
+chatbot telling you what you want to hear.
+
+
+==============================================================
+2. THE PROBLEM
+==============================================================
+- One chatbot = one voice. It tends to agree with you, and it
+  never argues with itself.
+- Asking several models separately gives you four monologues, not
+  a discussion. Nobody listens to anybody.
+- Real decisions get better when people with different priorities
+  push back on each other, and then hand the final call to you.
+
+
+==============================================================
+3. THE SOLUTION: FOUR ADVISORS IN ONE ROOM
+==============================================================
+  Ruby  (red)     Action, priorities, results   "What do we do Monday?"
+  Lemon (yellow)  Possibilities, creativity     "What else could this be?"
+  Jade  (green)   People, trust, continuity     "Who does this affect?"
+  Bleu  (blue)    Evidence, feasibility         "What supports this?"
+
+Each has a perspective, a voice, and a blind spot. They:
+- listen to each other before speaking,
+- say "I disagree" / "a better approach is..." when their proposal
+  differs, and argue a point back and forth (capped),
+- stay quiet (pass) when they have nothing new,
+- ask YOU when only you can decide, then wait for your answer.
+
+The user leads: agents only speak in response to you, never in an
+endless agent-to-agent loop.
+
+
+==============================================================
+4. WHAT A ROUND LOOKS LIKE (the core mechanic)
+==============================================================
+You send a message. Then:
+
+ 1. All four advisors draft a reply AT THE SAME TIME (parallel).
+ 2. The first one with something to say speaks immediately.
+ 3. The others wait their turn. When they get the floor they
+    REVIEW their draft against everything said since they started
+    writing: keep it, revise it, or drop it ("already covered").
+    That review step is how they "listen".
+ 4. If someone was challenged by name, they may rebut. Up to 3
+    back-and-forth exchanges per round, then they must stop or ask
+    you to break the tie.
+ 5. The round ends when everyone is done -> your turn.
+
+If an advisor asks you a question, the round stops right there.
+Advisors still holding drafts keep them and go first after your
+answer, re-checking them against what you said.
+
+
+==============================================================
+5. FEATURES TO DEMO
+==============================================================
+- @mentions: "@bleu is this realistic?" -> only Bleu replies.
+  The others don't spend a single call but still "hear" it next
+  round.
+- /think bleu <message>: Bleu announces "let me think this
+  through", reasons at HIGH effort in the background while the
+  others keep talking, then delivers. Agents can also ask for deep
+  thought on their own; a second one waits for the first so they
+  don't duplicate work.
+- /temp <agent> 0-1: "boldness". 0 = generic, 0.5 = normal (prompt
+  unchanged), 1 = personality at full volume. Simulated in the
+  prompt, so it works on every model.
+- --angry: comedy mode. The advisors take offense, insult each
+  other, CAPS, "??". Insults stay aimed at each other, never you.
+- Questions you can answer, or set aside with /new.
+- Type while they talk to queue your next message.
+- /pause, /resume, /budget, /queue, /unqueue, /help, /quit.
+- Memory: every discussion autosaves; pick it up later from a
+  startup menu, like ChatGPT's chat history.
+- Reading-speed playback: text appears at about 340 words per
+  minute with a short "thinking" beat between speakers, so it feels
+  like people talking, not text dumps.
+- Pixel-art avatars for each advisor in the terminal UI.
+
+
+==============================================================
+6. ANY MODEL, ANY PROVIDER
+==============================================================
+Paste a key and the provider is detected from its prefix:
+  AIza...   Gemini (default gemini-3.8-flash)
+  sk-ant-   Claude (default claude-opus-5-5, official Anthropic SDK)
+  sk-or-    OpenRouter (openrouter/auto)
+  sk-...    ChatGPT / OpenAI (gpt-5.5)
+  custom    any OpenAI-compatible server, incl. local models
+
+Keys go to the OS keychain (or env vars), never the repo. One small
+provider interface means adding a provider is one adapter file.
+
+
+==============================================================
+7. HOW IT WORKS (architecture, for technical judges)
+==============================================================
+  User input
+     -> Orchestrator (src/core/orchestrator.ts)   the "room"
+          - room modes: initial / running / awaiting-user / paused
+          - per-agent live state: listening, thinking, deliberating,
+            waiting, reviewing, speaking, has-question, passing
+          - the "floor": one speaker at a time, first come first
+            served
+     -> Event log (src/core/events.ts)   append-only shared history;
+        only two kinds: user-message, agent-message
+     -> ModelProvider (src/providers/*)   streamed text, swappable
+     -> UI: Ink/React TUI (src/ui/app.tsx), or --plain transcript
+
+"Listening" costs nothing: the shared log IS what agents hear. Each
+model call is built from the log at that moment.
+
+Why we did NOT use LangGraph/LangChain:
+- Our agents need per-agent state visible at any instant (for
+  avatars) and "first finished speaks while others keep drafting".
+  Graph frameworks commit state at step boundaries and run parallel
+  branches in lockstep. That's the wrong shape for a live room.
+- Our orchestrator is plain TypeScript async with no framework, so
+  pause, budgets, and hand-offs are exact and easy to test.
+
+
+==============================================================
+8. COST AND SPEED (judges always ask)
+==============================================================
+- Hard call budget per session (default 100). The app never
+  exceeds it; it pauses and asks first.
+- Per round: at most 4 drafts + reviews + 3 rebuttals.
+  @mentions cut it to just the named advisors.
+- Long chats stay cheap: once recent messages pass about 8k tokens,
+  older rounds fold into a running summary (keep about 3k verbatim).
+  The full log is never lost, only what goes into each prompt.
+- Prompts are prefix-stable, so provider prompt caching kicks in.
+- Rate limits: automatic retry using the provider's own
+  "retry in N s" hint; retries don't count against the budget.
+- Latency is hidden: the next advisor prepares while you're still
+  reading the current one.
+
+
+==============================================================
+9. ENGINEERING QUALITY
+==============================================================
+- TypeScript (strict), Node 24, Ink 7 + React 19.
+- 53 automated tests (orchestrator, pacing, TUI, CLI) using FAKE
+  model providers, so zero API spend in CI.
+- Typecheck + ESLint + Prettier gate: `npm run check`.
+- Sessions saved atomically (write temp file, then rename) and
+  validated on load.
+- Packaged for npm as `idiots` (commands: `idiots`, `i4s`).
+  Not yet live: publishing is waiting on npm 2FA for our account.
+
+
+==============================================================
+10. LIVE DEMO SCRIPT (about 3 minutes)
+==============================================================
+ 1. `npm run dev`  (or `idiots` once published) -> pick provider ->
+    New discussion.
+ 2. "I want to launch a coffee subscription in 3 months."
+    -> four advisors respond, disagree, someone asks a question.
+ 3. Answer it ("$5k budget") -> held drafts adapt to the answer.
+ 4. "@bleu is that budget realistic?" -> only Bleu answers.
+ 5. "/think bleu how should I price this?" -> watch Bleu announce,
+    others keep going, Bleu delivers last.
+ 6. "/temp lemon 1" -> Lemon goes all-in on wild ideas.
+ 7. Quit, relaunch, continue the same discussion from the menu.
+ 8. Closer: restart with --angry for the laugh.
+
+
+==============================================================
+11. WHAT'S NEXT
+==============================================================
+- Web search for agents (provider-native search, or one shared
+  search tool).
+- Publish to npm and a one-command install.
+- Personas as a switchable mode (an anime-style cast lives on a
+  side branch, not on main).
+- Export a discussion to a decision summary / Markdown.
+
+
+==============================================================
+12. RUNNING IT (for teammates)
+==============================================================
+  npm ci            install (Node 24)
+  npm run dev       run the TUI from source
+  npm run demo      plain-text transcript mode
+  npm run check     typecheck, lint, format, tests
+  npm run build     compile to dist/
+
+Data lives outside the repo:
+  keys          system keychain (or GEMINI_API_KEY etc.)
+  discussions   ~/.the-idiots/sessions/*.json
+  settings      ~/.the-idiots/settings.json
