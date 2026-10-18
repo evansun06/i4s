@@ -1,0 +1,442 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { panel } from '../dist/agents/panel.js';
+import { Orchestrator } from '../dist/core/orchestrator.js';
+import { RateLimitError } from '../dist/providers/model.js';
+
+/** `script(kind, agent, prompt)` returns the reply; it streams in two chunks. */
+function fakeProvider(script) {
+  const calls = [];
+  return {
+    calls,
+    async *generate(request) {
+      const agent =
+        /YOUR PERSPECTIVE — (\w+)/.exec(request.system)?.[1].toLowerCase() ??
+        'summarizer';
+      calls.push({ kind: request.kind, agent, prompt: request.prompt });
+      const reply = await script(request.kind, agent, request.prompt);
+      const middle = Math.ceil(reply.length / 2);
+      yield reply.slice(0, middle);
+      yield reply.slice(middle);
+    },
+  };
+}
+
+function room(script, callLimit = 50) {
+  const provider = fakeProvider(script);
+  const orchestrator = new Orchestrator({ agents: panel, provider, callLimit });
+  return { provider, orchestrator };
+}
+
+const said = (orchestrator) =>
+  orchestrator.bus.log
+    .filter((e) => e.kind !== 'user-message')
+    .map((e) => `${e.agent}: ${e.text}`);
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const staggered = { red: 1, yellow: 5, green: 10, blue: 15 };
+
+test('everyone drafts at once; the first speaks live, the rest review', async () => {
+  const { provider, orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review') return 'KEEP';
+    await delay(staggered[agent]);
+    return `SPEAK\n${agent} draft`;
+  });
+  await orchestrator.submit('Plan my launch');
+
+  assert.deepEqual(said(orchestrator), [
+    'red: red draft',
+    'yellow: yellow draft',
+    'green: green draft',
+    'blue: blue draft',
+  ]);
+  const reviews = provider.calls.filter((c) => c.kind === 'review');
+  assert.deepEqual(
+    reviews.map((c) => c.agent),
+    ['yellow', 'green', 'blue'],
+  );
+  assert.match(
+    reviews[0].prompt,
+    /USER: Plan my launch\n--- You started drafting here.*\nRED: red draft\n/,
+  );
+  // Each message appears once; the marker replaces a repeated copy.
+  assert.equal(reviews[0].prompt.match(/RED: red draft/g).length, 1);
+  assert.equal(orchestrator.snapshot().mode, 'awaiting-user');
+});
+
+test('a waiting agent can drop or revise its draft after listening', async () => {
+  const { orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review')
+      return agent === 'blue' ? 'WITHDRAW' : 'REVISE\nBuilding on Red.';
+    if (agent === 'yellow') return 'PASS';
+    await delay(agent === 'red' ? 1 : 5);
+    return `SPEAK\n${agent} draft`;
+  });
+  await orchestrator.submit('Plan my launch');
+
+  assert.deepEqual(said(orchestrator), [
+    'red: red draft',
+    'green: Building on Red.',
+  ]);
+  assert.deepEqual(orchestrator.snapshot().lastTurn, {
+    agent: 'blue',
+    result: 'withdrew',
+  });
+});
+
+test('if every agent passes, the quietest agent still replies', async () => {
+  const { orchestrator } = room((kind, agent, prompt) =>
+    prompt.includes('PASS') ? 'PASS' : `SPEAK\n${agent} forced`,
+  );
+  await orchestrator.submit('hello');
+  await orchestrator.submit('hello again');
+  assert.deepEqual(said(orchestrator), [
+    'red: red forced',
+    'yellow: yellow forced',
+  ]);
+});
+
+test('a question stops the round; held drafts resume after the answer', async () => {
+  let round = 1;
+  const { provider, orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review') {
+      return agent === 'blue' ? 'REVISE\nWith $5k, start small.' : 'KEEP';
+    }
+    if (round === 2) return agent === 'red' ? 'SPEAK\nThanks.' : 'PASS';
+    await delay(agent === 'red' ? 1 : 5);
+    if (agent === 'red')
+      return 'SPEAK\nScope it.\nQUESTION: What is your budget?';
+    return agent === 'blue' ? 'SPEAK\nPlan big.' : 'PASS';
+  });
+  await orchestrator.submit('Plan my launch');
+  await delay(10); // Blue's draft lands after the question.
+
+  let snapshot = orchestrator.snapshot();
+  assert.equal(snapshot.mode, 'awaiting-user');
+  assert.deepEqual(snapshot.pendingQuestion, {
+    agent: 'red',
+    eventId: 1,
+    question: 'What is your budget?',
+  });
+  assert.deepEqual(said(orchestrator), [
+    'red: Scope it.\nQUESTION: What is your budget?',
+  ]);
+  // Questions are ordinary agent messages; the QUESTION line marks them.
+  assert.deepEqual(Object.keys(orchestrator.bus.log[1]).sort(), [
+    'agent',
+    'id',
+    'kind',
+    'text',
+  ]);
+  assert.equal(orchestrator.bus.log[1].kind, 'agent-message');
+  assert.equal(snapshot.agents.red.activity, 'has-question');
+  assert.equal(snapshot.agents.blue.activity, 'waiting');
+
+  round = 2;
+  const before = provider.calls.length;
+  await orchestrator.submit('$5k');
+
+  assert.equal(orchestrator.bus.log[2].replyTo, 1);
+  // Blue goes first, reviews the answer, and does not draft again.
+  const roundTwo = provider.calls.slice(before);
+  assert.deepEqual(
+    roundTwo.filter((c) => c.agent === 'blue').map((c) => c.kind),
+    ['review'],
+  );
+  assert.match(roundTwo.find((c) => c.agent === 'blue').prompt, /USER: \$5k/);
+  assert.deepEqual(said(orchestrator).slice(1), [
+    'blue: With $5k, start small.',
+    'red: Thanks.',
+  ]);
+  snapshot = orchestrator.snapshot();
+  assert.equal(snapshot.pendingQuestion, undefined);
+  assert.equal(snapshot.mode, 'awaiting-user');
+});
+
+test('the user can answer while other drafts are still finishing', async () => {
+  const { orchestrator } = room(async (kind, agent) => {
+    await delay(agent === 'red' ? 1 : 20);
+    return agent === 'red' ? 'SPEAK\nQUESTION: Budget?' : 'PASS';
+  });
+  // The round resolves as soon as the question is asked, so the user can
+  // answer while other drafts are still finishing.
+  await orchestrator.submit('go');
+  assert.equal(orchestrator.snapshot().mode, 'awaiting-user');
+  assert.equal(orchestrator.snapshot().agents.blue.activity, 'thinking');
+});
+
+test('the log is sequential and attributes every message', async () => {
+  const { orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review') return 'KEEP';
+    // Blue answers first even though Red starts first.
+    await delay(agent === 'blue' ? 1 : 10);
+    return agent === 'red' || agent === 'blue' ? `SPEAK\n${agent}` : 'PASS';
+  });
+  await orchestrator.submit('first');
+  await orchestrator.submit('second');
+
+  assert.deepEqual(
+    orchestrator.bus.log.map(({ id, kind, agent, text }) => [
+      id,
+      kind,
+      agent,
+      text,
+    ]),
+    [
+      [0, 'user-message', undefined, 'first'],
+      [1, 'agent-message', 'blue', 'blue'],
+      [2, 'agent-message', 'red', 'red'],
+      [3, 'user-message', undefined, 'second'],
+      [4, 'agent-message', 'blue', 'blue'],
+      [5, 'agent-message', 'red', 'red'],
+    ],
+  );
+});
+
+test('pausing lets the current speaker finish but grants no new turns', async () => {
+  const { orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review') return 'KEEP';
+    if (agent !== 'red' && agent !== 'blue') return 'PASS';
+    if (agent === 'blue') await delay(5);
+    return `SPEAK\n${agent}`;
+  });
+  // Pause while Red is mid-reply.
+  orchestrator.subscribe(() => {
+    if (orchestrator.snapshot().speaking?.agent === 'red') orchestrator.pause();
+  });
+  const cycle = orchestrator.submit('go');
+  await delay(20);
+
+  assert.equal(orchestrator.snapshot().mode, 'paused');
+  assert.deepEqual(said(orchestrator), ['red: red']);
+  assert.deepEqual(orchestrator.snapshot().queue, ['blue']);
+
+  assert.equal(orchestrator.resume(), true);
+  await cycle;
+  assert.deepEqual(said(orchestrator), ['red: red', 'blue: blue']);
+  assert.equal(orchestrator.snapshot().mode, 'awaiting-user');
+});
+
+test('the call limit pauses the room until it is raised', async () => {
+  const { orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review') return 'KEEP';
+    await delay(staggered[agent]);
+    return `SPEAK\n${agent}`;
+  }, 5);
+  const cycle = orchestrator.submit('go');
+  await delay(40);
+
+  let snapshot = orchestrator.snapshot();
+  assert.equal(snapshot.mode, 'paused');
+  assert.equal(snapshot.callsUsed, 5);
+  assert.match(snapshot.notice, /Usage limit/);
+  assert.equal(orchestrator.resume(), false);
+
+  orchestrator.raiseCallLimit(10);
+  assert.equal(orchestrator.resume(), true);
+  await cycle;
+  snapshot = orchestrator.snapshot();
+  assert.equal(snapshot.callsUsed, 7);
+  assert.equal(said(orchestrator).length, 4);
+});
+
+test('rate limits are retried without counting as calls', async () => {
+  let limited = 2;
+  const { orchestrator } = room((kind, agent) => {
+    if (agent !== 'red') return 'PASS';
+    if (limited-- > 0) throw new RateLimitError('slow down', 0.01);
+    return 'SPEAK\nmade it';
+  });
+  await orchestrator.submit('go');
+
+  assert.deepEqual(said(orchestrator), ['red: made it']);
+  assert.equal(orchestrator.snapshot().callsUsed, 4);
+});
+
+test('user input is rejected while a cycle is running', async () => {
+  const { orchestrator } = room(() => 'SPEAK\nok');
+  const cycle = orchestrator.submit('first');
+  await assert.rejects(orchestrator.submit('second'), /Wait for the agents/);
+  await cycle;
+});
+
+test('older rounds are folded into a summary; the log keeps everything', async () => {
+  const provider = fakeProvider((kind, agent, prompt) => {
+    if (kind === 'summary')
+      return `summary #${(prompt.match(/USER:/g) ?? []).length}`;
+    return agent === 'red' ? `SPEAK\n${'word '.repeat(40)}` : 'PASS';
+  });
+  const orchestrator = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit: 100,
+    compactAtTokens: 120,
+    keepTokens: 70,
+  });
+  for (const text of ['one', 'two', 'three', 'four', 'five', 'six']) {
+    await orchestrator.submit(text);
+  }
+
+  assert.equal(orchestrator.bus.log.length, 12);
+  const summaries = provider.calls.filter((c) => c.kind === 'summary');
+  assert.equal(summaries.length, 2);
+  const lastDraft = provider.calls.findLast((c) => c.kind === 'draft');
+  assert.match(lastDraft.prompt, /^SUMMARY OF EARLIER DISCUSSION:\nsummary #/);
+  assert.doesNotMatch(lastDraft.prompt, /USER: one/);
+  assert.match(lastDraft.prompt, /USER: six/);
+  // Each summary folds the previous one in rather than rereading old rounds.
+  assert.match(summaries.at(-1).prompt, /PREVIOUS SUMMARY:\nsummary #/);
+});
+
+test('agent states are readable at any moment and report every change', async () => {
+  const { orchestrator } = room(async (kind, agent) => {
+    if (kind === 'review') return 'KEEP';
+    await delay(agent === 'red' ? 1 : 5);
+    if (agent === 'blue')
+      return 'SPEAK\nNeed data.\nQUESTION: What is the budget?';
+    return agent === 'red' ? 'SPEAK\nShip it.' : 'PASS';
+  });
+  const seen = { red: [], yellow: [], green: [], blue: [] };
+  const shown = [];
+  orchestrator.subscribeAgents((id, state) => seen[id].push(state.activity));
+  orchestrator.subscribe(() => {
+    const { speaking } = orchestrator.snapshot();
+    if (speaking && shown.at(-1) !== speaking.agent) shown.push(speaking.agent);
+  });
+  await orchestrator.submit('go');
+
+  assert.deepEqual(seen.red, ['thinking', 'speaking', 'listening']);
+  assert.deepEqual(seen.yellow, ['thinking', 'passing']);
+  assert.deepEqual(seen.blue, [
+    'thinking',
+    'has-question',
+    'reviewing',
+    'speaking',
+    'has-question',
+  ]);
+  assert.deepEqual(orchestrator.agentState('blue'), {
+    activity: 'has-question',
+  });
+  assert.deepEqual(orchestrator.snapshot().agents.yellow, {
+    activity: 'passing',
+  });
+  // Blue's kept draft is shown to the user, not just logged.
+  assert.deepEqual(shown, ['red', 'blue']);
+});
+
+test('agentState reflects each state while it is happening', async () => {
+  const observed = {};
+  const blue = () => orchestrator.agentState('blue').activity;
+  const provider = {
+    async *generate({ kind, system }) {
+      const agent = /YOUR PERSPECTIVE — (\w+)/.exec(system)[1].toLowerCase();
+      if (agent === 'red') {
+        yield 'SPEAK\nRed is ';
+        await delay(15); // Red is still talking when Blue's draft is ready.
+        observed.whileRedSpeaks = blue();
+        yield 'still talking.';
+      } else if (agent === 'blue' && kind === 'review') {
+        observed.duringReview = blue();
+        yield 'KEEP';
+      } else if (agent === 'blue') {
+        observed.whileDrafting = blue();
+        await delay(5);
+        yield 'SPEAK\nBlue point.';
+      } else {
+        yield 'PASS';
+      }
+    },
+  };
+  const orchestrator = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit: 50,
+  });
+  orchestrator.subscribe(() => {
+    if (orchestrator.snapshot().speaking?.agent === 'blue')
+      observed.whileSpeaking ??= blue();
+  });
+  await orchestrator.submit('go');
+  observed.after = blue();
+
+  assert.deepEqual(observed, {
+    whileDrafting: 'thinking',
+    whileRedSpeaks: 'waiting',
+    duringReview: 'reviewing',
+    whileSpeaking: 'speaking',
+    after: 'listening',
+  });
+});
+
+test('the user can set a question aside; held drafts are redone', async () => {
+  let round = 1;
+  const { provider, orchestrator } = room(async (kind, agent) => {
+    if (round === 2)
+      return agent === 'blue' ? 'SPEAK\nOn pricing: test it.' : 'PASS';
+    await delay(agent === 'red' ? 1 : 5);
+    if (agent === 'red')
+      return 'SPEAK\nScope it.\nQUESTION: What is your budget?';
+    return agent === 'blue' ? 'SPEAK\nOld topic.' : 'PASS';
+  });
+  await orchestrator.submit('Plan my launch');
+  await delay(10);
+  assert.equal(orchestrator.snapshot().agents.blue.activity, 'waiting');
+
+  round = 2;
+  const before = provider.calls.length;
+  await orchestrator.submit("Let's talk pricing instead", { answer: false });
+
+  const message = orchestrator.bus.log[2];
+  assert.equal(message.replyTo, undefined);
+  // Blue drops its held draft and drafts fresh instead of reviewing it.
+  const blueCalls = provider.calls
+    .slice(before)
+    .filter((c) => c.agent === 'blue');
+  assert.deepEqual(
+    blueCalls.map((c) => c.kind),
+    ['draft'],
+  );
+  assert.match(blueCalls[0].prompt, /RED \(asked the user; not answered yet\)/);
+  assert.deepEqual(said(orchestrator).slice(1), ['blue: On pricing: test it.']);
+  assert.equal(orchestrator.snapshot().pendingQuestion, undefined);
+});
+
+test('after a recent question, agents are told not to ask another', async () => {
+  let round = 1;
+  const { provider, orchestrator } = room((kind, agent) => {
+    if (round === 1 && agent === 'red') return 'SPEAK\nQUESTION: Budget?';
+    return agent === 'red' ? 'SPEAK\nNoted.' : 'PASS';
+  });
+  await orchestrator.submit('Plan my launch');
+  const roundOne = provider.calls.find((c) => c.kind === 'draft');
+  assert.match(roundOne.prompt, /Ask the user at most one question/);
+
+  round = 2;
+  const before = provider.calls.length;
+  await orchestrator.submit('$5k');
+  const roundTwo = provider.calls.slice(before).find((c) => c.kind === 'draft');
+  assert.match(roundTwo.prompt, /RED \(asked the user; answered\)/);
+  assert.match(roundTwo.prompt, /Do not ask another/);
+});
+
+test('an instant answer still lets the asker and late passers reply', async () => {
+  let round = 1;
+  const { orchestrator } = room(async (kind, agent) => {
+    await delay(agent === 'red' ? 1 : 5);
+    if (round === 1)
+      return agent === 'red' ? 'SPEAK\nQUESTION: Budget?' : 'PASS';
+    return `SPEAK\n${agent} on $5k`;
+  });
+  await orchestrator.submit('go');
+  round = 2;
+  await orchestrator.submit('$5k'); // No pause between the rounds.
+
+  // Red asked; Yellow, Green, and Blue were still drafting when the user
+  // answered. All four reply to the answer.
+  assert.deepEqual(
+    said(orchestrator)
+      .slice(1)
+      .map((line) => line.split(':')[0])
+      .sort(),
+    ['blue', 'green', 'red', 'yellow'],
+  );
+});

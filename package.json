@@ -26,22 +26,27 @@
     "format:check": "prettier --check .",
     "test": "npm run build && node --test tests/*.test.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "demo": "tsx src/cli.tsx --plain"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@inquirer/password": "^5.2.3",
+    "@inquirer/select": "^5.2.6",
     "ink": "^7.0.6",
+    "keytar": "^7.9.0",
     "react": "^19.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.2.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-react-hooks": "^7.0.0",
     "globals": "^16.0.0",
     "prettier": "^3.8.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.0.0"
   }

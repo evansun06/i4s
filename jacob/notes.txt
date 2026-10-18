@@ -1,0 +1,79 @@
+HIGH:
+change api access to universal
+allow option to @ specific colours to only get their specific output, but still have other colours listening so they don't lose track of the convo
+    - will require update to prompt to not hold floor for too long unless explcitly mentioned/wanted
+
+LOW:
+require better api key verification and unfcitonality testing
+Only has support for gemeni, cahtgpt, claude
+
+agents sound too robotic, needs to more natural and conversatinoal
+make output speed slower, add a fake delay/thinking
+make messages shorter
+
+/new <msg> overrides question
+ISSUES:
+- Speed, can implement streaming
+- We could also try a "draft" approach, where agents in line generate most of thier content in a draft, and right when curr ends, they check if their draft is valid
+    - However, this adds a call, and doesn't ensure to increase speed
+- Also current implementation has agents pops out when its turn comes, not when the moment it gets covered, meaning we will see agent raising hand and then putting it down.
+    - Fix is to add a cheap bacthed check after each message of "which queued intentions got answered?", a single call for all queued agents
+- Update agent prompts, really knock down the behaviour
+
+
+
+
+ochestration layer:
+- manages asynchronous ai, like if one is away researching, also in charge of managing queue for speaking, updating room state for like ask a question, clarify, bring up a point, 
+- moves time forrard, after each step/convo, move forward, updates "events" (which is just our log)
+                        - only three events:
+                            - User response
+                            - Agent response
+                            - agent question
+                            - (maybe future impleent agent asking eahc other question)
+- ROOM STATE NEVER TOUCHES AGENTS
+- someting like a pause only stops next upcoming "step", so async reseach doesnt get interupted
+
+
+
+
+- No pause key and no way to skip a question. The engine supports both, but the demo only pauses when you hit the call limit, and anything you type after an agent's question counts as your answer.
+- No @mentions to pick who speaks.
+- Nothing is saved. Exiting loses the session, and each call resends the whole transcript, so very long sessions get slower and more expensive.
+- Requires some sort of storage, since currently no session saving
+
+
+
+- Listening fixes what the agent knows about the conversation: "since I raised my hand, Red already made my point." We have this.
+- Research fixes what the agent knows about the world, or how hard it thinks. We don't have this. Every turn uses low reasoning effort, a capped reply length, and no web access. So an in-depth request gets the same treatment as a simple one, and agents can only use what the model already knows.
+
+If you only care about talking and listening right now, the current version is enough, and research can wait. When you want it, the cheap first step is the "deep" bid I described. An agent that flags its point as deep gets a turn with higher effort and a bigger budget, and nothing else changes.
+
+
+
+
+avoid chains of question in AI prompts !!!!!
+    - Specific, agents should be aware of current conversation direction, ie if there are chains of questions, no more questions, etc. 
+add option to skip questions/back to general discussion
+give each agent their own distinct voice, less is more, pointing out the main idea of thier persona to avoid overlap
+- Add "disagree/questioning" of fellow agents -> rn too agreeable
+limit 
+
+!!!!! does log summarization alter whole log? cause then ryan wouldn't have the ideal logs
+!!! also still can't continue prev convos. 
+
+
+
+
+
+Why not LangGraph / LangChain
+
+LangGraph models a workflow as a graph: nodes are steps, edges decide what runs next, and shared state flows through. That's a good fit for pipelines and tool-calling agents. Our room is a different shape:
+
+1. Cycles are short, and a plain loop fits them. A cycle is: 4 bids in parallel → take queued agents in order → stop. In our code, that's one while loop and Promise.race. As a graph, the same thing needs a supervisor node, conditional edges, and a checkpointer. Same behavior, more pieces.
+2. Pausing has to be exact. AGENTS.md says no new model calls when paused or awaiting the user, background calls included, plus a hard usage budget. In our code, every call passes one gate (#acquireCall), so it's easy to see that the rule holds. With LangGraph, you'd have to trust its interrupt and resume behavior to match that rule.
+3. Its chat model is the wrong shape. LangChain assumes one assistant and one user taking turns. We have four speakers, private bids, and "here's what you missed since you raised your hand." We'd end up writing our own prompts around its message classes anyway.
+4. Provider freedom is already solved. LangChain's biggest draw is swapping models. Our ModelProvider interface is about 10 lines, and one adapter already covers Gemini, OpenAI, OpenRouter and local models.
+5. Cost, speed and upkeep. LangChain packages are large and change often, and each layer adds some overhead per call. AGENTS.md also says not to add a dependency without a concrete need, and so far there isn't one.
+
+When it would make sense: if agents later need multi-step tool use (search → read → summarize → search again), long-running jobs that survive a restart, or tracing in LangSmith. Even then, I'd use it only inside a single agent's research step and keep the room's queue in our own code.
