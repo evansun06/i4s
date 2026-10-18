@@ -64,3 +64,8 @@ export function editorWindow(
   }
   return { before: left.join(''), cursor, after };
 }
+
+/** Moves a list selection, stopping at the first and last items (no wrap). */
+export function step(index: number, by: number, count: number): number {
+  return Math.max(0, Math.min(count - 1, index + by));
+}

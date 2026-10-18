@@ -1,4 +1,4 @@
-import { agentIds, identities } from '../agents/identity.js';
+import { aboutText, agentIds, identities } from '../agents/identity.js';
 import type { Orchestrator } from '../core/orchestrator.js';
 import type { AgentId, RoomSnapshot } from '../core/types.js';
 import { helpText, parseCommand } from './commands.js';
@@ -17,7 +17,8 @@ export type DrawingState =
 
 export interface ChatMessage {
   readonly key: number;
-  readonly speaker: AgentId | 'user' | 'system';
+  /** korg: drawing results, from the drawing character. */
+  readonly speaker: AgentId | 'user' | 'system' | 'korg';
   text: string;
   eventId?: number;
   complete: boolean;
@@ -80,6 +81,8 @@ export class ChatController {
         message: ChatMessage;
         utterance: Utterance;
         raw: string;
+        /** Interrupted before it was said: keep only what was shown. */
+        cut?: boolean;
       }
     | undefined;
   #snapshot: PresentationSnapshot | undefined;
@@ -214,6 +217,7 @@ export class ChatController {
       });
       this.#stream = { agent, message, utterance, raw: text };
     }
+    if (this.#stream.cut) return;
     this.#stream.raw = text;
     this.#stream.utterance.update(messageText(text));
   }
@@ -222,15 +226,23 @@ export class ChatController {
     if (!this.#stream) return;
     if (this.#stream.message.eventId === undefined)
       this.#stream.message.failed = true;
-    this.#stream.utterance.update(messageText(this.#stream.raw, true));
+    this.#stream.utterance.update(
+      this.#stream.cut
+        ? this.#stream.message.text
+        : messageText(this.#stream.raw, true),
+    );
     this.#stream.utterance.finish();
     this.#stream = undefined;
   }
 
-  #system(text: string, link?: ChatMessage['link']): void {
+  #system(
+    text: string,
+    speaker: 'system' | 'korg' = 'system',
+    link?: ChatMessage['link'],
+  ): void {
     this.#messages.push({
       key: this.#key++,
-      speaker: 'system',
+      speaker,
       text,
       complete: true,
       ...(link ? { link } : {}),
@@ -249,23 +261,55 @@ export class ChatController {
     return next;
   }
 
+  /**
+   * Esc: stop the discussion now and hand the floor to the user. A reply
+   * not yet said is cut where it stands; replies already said appear in full
+   * at once. Returns false if nothing was going on.
+   */
+  interrupt(): boolean {
+    if (this.#closing) return false;
+    // While Korg draws, Esc cancels the drawing and discards its maps.
+    if (this.#drawing?.status === 'running') {
+      this.#drawAbort?.abort();
+      return true;
+    }
+    if (this.#stream && this.#stream.message.eventId === undefined) {
+      this.#stream.cut = true;
+      this.#stream.utterance.update(this.#stream.message.text);
+    }
+    const stopped = this.engine.interrupt();
+    const playing = this.#playback.size > 0;
+    this.#pacer.skip();
+    this.#changed();
+    return stopped || playing;
+  }
+
   /** Reserve the next turn without submitting or changing the editor. */
   raiseHand(): boolean {
     return !this.#closing && this.engine.raiseHand();
   }
 
-  /** Returns true only for /quit; the caller owns terminal teardown. */
-  accept(input: string): boolean {
+  /**
+   * Returns where the user is going when the input leaves the chat (/quit or
+   * /lobby), else false. The caller closes the controller and the screen.
+   */
+  accept(input: string): 'quit' | 'lobby' | false {
     if (this.#closing || !input.trim()) return false;
     const command = parseCommand(input);
     switch (command.kind) {
       case 'quit':
-        return true;
+      case 'lobby':
+        return command.kind;
       case 'error':
         this.#system(command.text);
         break;
       case 'help':
         this.#system(helpText);
+        break;
+      case 'about':
+        this.#system(
+          aboutText(command.agents.length ? command.agents : undefined),
+        );
         break;
       case 'pause':
         this.engine.pause();
@@ -396,6 +440,7 @@ export class ChatController {
           this.#drawing = { status: 'ready', result };
           this.#system(
             `Maps saved: ${result.filePath}\nThe room remains paused. /resume continues the discussion.`,
+            'korg',
             {
               label: 'Go online to edit',
               url: result.editUrl ?? 'https://excalidraw.com',
@@ -403,12 +448,22 @@ export class ChatController {
           );
         }
       } catch (error) {
-        if (!this.#closing) {
+        if (this.#closing) {
+          // Quitting: nothing to report.
+        } else if (abort.signal.aborted) {
+          // Esc: the maps are discarded.
+          this.#drawing = undefined;
+          this.#system(
+            'Drawing cancelled. The room remains paused; /resume continues.',
+            'korg',
+          );
+        } else {
           const message =
             error instanceof Error ? error.message : 'Drawing failed.';
           this.#drawing = { status: 'failed', message };
           this.#system(
             `${message}\nThe room remains paused. Use /draw to retry or /resume to continue.`,
+            'korg',
           );
         }
       } finally {

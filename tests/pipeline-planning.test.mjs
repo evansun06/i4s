@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { finalizePlanningGraphs } from '../dist/step2/finalize.js';
-import { validatePlanningGraphs } from '../dist/step2/validate.js';
-import { linkPlanningGraphs } from '../dist/step2/link.js';
-import { edgeRepairSchema } from '../dist/step2/repairSchema.js';
+import { finalizePlanningGraphs } from '../dist/drawing/excalidraw/step2/finalize.js';
+import { validatePlanningGraphs } from '../dist/drawing/excalidraw/step2/validate.js';
+import { linkPlanningGraphs } from '../dist/drawing/excalidraw/step2/link.js';
+import { edgeRepairSchema } from '../dist/drawing/excalidraw/step2/repairSchema.js';
 import {
   implementationGraphSchema,
   validateSchema,
   strictWireSchema,
   normalizeWireValue,
-} from '../dist/contracts.js';
-import { bookSwap, baseObject } from './helpers.mjs';
+} from '../dist/drawing/excalidraw/contracts.js';
+import { bookSwap, baseObject } from './pipeline/helpers.mjs';
 
 function finish(data = bookSwap()) {
   return finalizePlanningGraphs(
@@ -387,7 +387,10 @@ test('both graphs resolve canonical opinions and cross-links without copying rea
 test('serialized Step 2 output matches the deterministic handoff snapshot', async () => {
   const snapshot = JSON.parse(
     await readFile(
-      new URL('./fixtures/book-swap.step2.snapshot.json', import.meta.url),
+      new URL(
+        './pipeline/fixtures/book-swap.step2.snapshot.json',
+        import.meta.url,
+      ),
       'utf8',
     ),
   );

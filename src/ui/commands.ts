@@ -10,15 +10,17 @@ export const commands = [
   { name: '/budget', help: '<calls> Add to the call allowance' },
   { name: '/temp', help: '[agent|all] [0–1|reset] Boldness' },
   { name: '/think', help: '[agents] <message> Think deeply' },
+  { name: '/about', help: '[agent] Who the advisors are' },
   { name: '/new', help: '<message> Set the pending question aside' },
   { name: '/queue', help: 'Show queued messages' },
   { name: '/unqueue', help: 'Remove the latest queued message' },
+  { name: '/lobby', help: 'Save and return to the lobby' },
   { name: '/quit', help: 'Save and exit' },
 ] as const;
 
 export const helpText =
   commands.map(({ name, help }) => `${name}  ${help}`).join('\n') +
-  '\n\nTab or Enter complete · ↑↓ or mouse wheel scroll (or pick a suggestion) · PgUp/PgDn page · Ctrl+End live · Ctrl+P/Ctrl+N history · Ctrl+Q slower · Ctrl+E faster · Ctrl+R raise hand · Esc dismiss · Ctrl+C quit';
+  '\n\nTab or Enter complete · ↑↓ or mouse wheel scroll (or pick a suggestion) · PgUp/PgDn page · Ctrl+End live · Ctrl+P/Ctrl+N history · Ctrl+Q slower · Ctrl+E faster · Ctrl+R raise hand · Esc dismiss suggestions or interrupt · Ctrl+C quit';
 
 export interface Completion {
   readonly label: string;
@@ -38,7 +40,7 @@ export function complete(input: string, cursor = input.length): Completion[] {
       { name: `@${identities[id].name.toLowerCase()}`, help: id },
       { name: `@${id}`, help: identities[id].name },
     ]);
-  } else if (/^\/(temp|think)\s/i.test(before)) {
+  } else if (/^\/(temp|think|about)\s/i.test(before)) {
     const args = prefix.trim().split(/\s+/).slice(1);
     const command = before.split(/\s/)[0]?.toLowerCase();
     if (args.every((arg) => resolveAgent(arg) || arg === 'all')) {
@@ -50,7 +52,9 @@ export function complete(input: string, cursor = input.length): Completion[] {
                 { name: identities[id].name.toLowerCase(), help: id },
                 { name: id, help: identities[id].name },
               ]),
-              { name: 'all', help: 'All four agents' },
+              ...(command === '/about'
+                ? []
+                : [{ name: 'all', help: 'All four agents' }]),
               ...(command === '/temp'
                 ? [{ name: 'reset', help: 'Normal boldness (0.5)' }]
                 : []),
@@ -94,8 +98,17 @@ export type Command =
       deep?: readonly AgentId[];
     }
   | {
-      kind: 'help' | 'pause' | 'resume' | 'draw' | 'queue' | 'unqueue' | 'quit';
+      kind:
+        | 'help'
+        | 'pause'
+        | 'resume'
+        | 'draw'
+        | 'queue'
+        | 'unqueue'
+        | 'lobby'
+        | 'quit';
     }
+  | { kind: 'about'; agents: readonly AgentId[] }
   | { kind: 'budget'; by: number }
   | { kind: 'temp'; settings: readonly TemperatureSetting[] }
   | { kind: 'error'; text: string };
@@ -114,12 +127,19 @@ export function parseCommand(input: string): Command {
     'draw',
     'queue',
     'unqueue',
+    'lobby',
     'quit',
   ] as const) {
     if (name === `/${simple}`)
       return args
         ? { kind: 'error', text: `/${simple} takes no arguments.` }
         : { kind: simple };
+  }
+  if (name === '/about') {
+    const agents = words.map(resolveAgent);
+    return agents.every((id) => id !== undefined)
+      ? { kind: 'about', agents: [...new Set(agents)] }
+      : { kind: 'error', text: 'Use /about or /about @ruby (any advisor).' };
   }
   if (name === '/budget') {
     const by = Number(args);

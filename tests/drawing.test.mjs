@@ -321,7 +321,8 @@ test('subprocess consumes the saved session log, reports calls, and creates a se
   const draw = createDrawingPipeline({
     sessionFile,
     outputDirectory: join(root, 'runs'),
-    pipelineDirectory: source,
+    entry: join(source, 'src/cli.ts'),
+    openAiKey: async () => 'sk-test-fake',
   });
   let calls = 0;
   const progress = [];
@@ -391,4 +392,76 @@ test('subprocess consumes the saved session log, reports calls, and creates a se
     /cancelled/,
   );
   await draw.close();
+});
+
+test('the pipeline gets the session OpenAI key through its environment, and never runs without one', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'i4s-draw-key-'));
+  const entry = join(root, 'cli.mjs');
+  // A stand-in pipeline that reports the key it was given, then fails.
+  await writeFile(
+    entry,
+    "process.stderr.write(`key=${process.env.OPENAI_API_KEY ?? 'none'}\\n`);\nprocess.exit(1);\n",
+  );
+  const run = (key) =>
+    createDrawingPipeline({
+      sessionFile: join(root, 'session.json'),
+      outputDirectory: join(root, 'runs'),
+      entry,
+      openAiKey: async () => key,
+    })({
+      signal: new AbortController().signal,
+      onCall: () => assert.fail('no model call should start'),
+      onProgress: () => {},
+    });
+  await assert.rejects(run('sk-test-session'), /key=sk-test-session/);
+  for (const missing of [undefined, '', '  '])
+    await assert.rejects(run(missing), /needs an OpenAI key/);
+});
+
+test('Esc cancels a drawing and discards its maps; Korg reports it', async () => {
+  let aborted = false;
+  let started = false;
+  const f = controllerWith(async (request) => {
+    started = true;
+    request.onProgress('Step 1: extracting…');
+    // A pipeline that only ends when cancelled, as the real one does.
+    await new Promise((_, fail) =>
+      request.signal.addEventListener(
+        'abort',
+        () => {
+          aborted = true;
+          fail(new Error('Drawing cancelled.'));
+        },
+        { once: true },
+      ),
+    );
+  });
+  try {
+    f.controller.accept('/draw');
+    await until(() => started);
+    assert.equal(f.controller.interrupt(), true);
+    await until(() => f.controller.snapshot().drawing === undefined);
+    assert.equal(aborted, true);
+    const last = f.controller.snapshot().messages.at(-1);
+    assert.equal(last.speaker, 'korg');
+    assert.match(last.text, /Drawing cancelled/);
+    assert.equal(last.link, undefined, 'no maps to open');
+    assert.equal(f.engine.snapshot().mode, 'paused');
+  } finally {
+    await f.controller.close();
+  }
+});
+
+test('drawing results come from Korg, with the edit link', async () => {
+  const f = controllerWith(async () => result);
+  try {
+    f.controller.accept('/draw');
+    await until(() => f.controller.snapshot().drawing?.status === 'ready');
+    const last = f.controller.snapshot().messages.at(-1);
+    assert.equal(last.speaker, 'korg');
+    assert.match(last.text, /Maps saved/);
+    assert.equal(last.link.label, 'Go online to edit');
+  } finally {
+    await f.controller.close();
+  }
 });

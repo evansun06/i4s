@@ -22,17 +22,23 @@ import { agentIds, identities } from '../agents/identity.js';
 import type { AgentId } from '../core/types.js';
 import { complete, completionOnEnter } from './commands.js';
 import type { ChatController, PresentationSnapshot } from './controller.js';
-import { edit, editorWindow, type EditorState } from './editor.js';
+import { edit, editorWindow, step, type EditorState } from './editor.js';
 import { DrawingLink } from './drawing.js';
-import { boldRuns } from './message-text.js';
+import {
+  boldRuns,
+  lightRuns,
+  shimmerBand,
+  type TextRun,
+} from './message-text.js';
 import {
   FloorAnimation,
   loadKorgSprites,
   loopingFrame,
+  scaleFrame,
   type SpriteAnimations,
   type SpriteFrame,
 } from './sprites.js';
-import { dimAvatarColor, theme, visibleText } from './theme.js';
+import { dimAvatarColor, lighten, theme, visibleText } from './theme.js';
 
 export function activityLabel(
   state: PresentationSnapshot,
@@ -49,16 +55,6 @@ export function activityLabel(
   if (activity === 'deliberating') return 'thinking deeply';
   if (activity === 'passing') return 'passed';
   return activity;
-}
-
-export function roomLabel(state: PresentationSnapshot): string {
-  if (state.closing) return 'Saving…';
-  if (state.drawing?.status === 'running') return 'Drawing maps…';
-  if (state.room.mode === 'paused') return 'Paused';
-  if (state.displaying || state.waiting.length) return 'Discussion';
-  if (state.question) return `Answer ${identities[state.question.agent].name}`;
-  if (state.room.mode === 'initial-prompt') return 'Ready';
-  return state.room.mode === 'running' ? 'Thinking' : 'Your turn';
 }
 
 /** Lines one mouse-wheel notch scrolls. */
@@ -88,7 +84,7 @@ export function floorAgent(state: PresentationSnapshot): AgentId | undefined {
   return state.displaying ?? state.question?.agent;
 }
 
-function Avatar({
+export function Avatar({
   frame,
   dimmed = false,
 }: {
@@ -125,9 +121,12 @@ function Avatar({
 function Korg({
   tick,
   reducedMotion,
+  size,
 }: {
   tick: number;
   reducedMotion: boolean;
+  /** Sprite size in pixels; undefined shows only his name and state. */
+  size: number | undefined;
 }) {
   const [sprites] = useState(loadKorgSprites);
   const [started] = useState(Date.now);
@@ -136,7 +135,7 @@ function Korg({
     : loopingFrame(sprites.idle, tick - started);
   return (
     <Box width={16} flexShrink={0} flexDirection="column" alignItems="center">
-      <Avatar frame={frame} />
+      {size !== undefined && <Avatar frame={scaleFrame(frame, size)} />}
       <Text color={theme.bright} bold>
         Korg
       </Text>
@@ -145,17 +144,95 @@ function Korg({
   );
 }
 
+/**
+ * Where the transcript sits in the chat area. `bottom` is the furthest it
+ * scrolls; `offset` is how far it is scrolled (undefined `scrollTop` follows
+ * the live end). A short conversation sits at the bottom, just above the
+ * status lines, so new messages push older ones up.
+ */
+export function chatPosition(
+  contentHeight: number,
+  chatHeight: number,
+  scrollTop?: number,
+): { bottom: number; offset: number; top: number } {
+  const bottom = Math.max(0, contentHeight - chatHeight);
+  const offset = Math.min(scrollTop ?? bottom, bottom);
+  return {
+    bottom,
+    offset,
+    top: Math.max(0, chatHeight - contentHeight) - offset,
+  };
+}
+
+/** Message text starts under the name: the orb and its space. */
+const MESSAGE_INDENT = 2;
+
+/**
+ * The speaker's orb pulses by size, shrinking and growing in its own color.
+ * Every glyph is one column wide, so the name beside it never shifts.
+ */
+export const ORB_SIZES = ['●', '•', '·', '•'] as const;
+
+/**
+ * Text with a light band sweeping left to right through it while `now` is
+ * set: the speaker's "Name · speaking" label, or Korg's "Korg · drawing".
+ */
+function Shimmer({
+  runs,
+  color,
+  now,
+}: {
+  runs: readonly TextRun[];
+  /** The text's own color; the band is a lighter shade of it. */
+  color: string;
+  now: number | undefined;
+}) {
+  const length = runs.reduce((total, run) => total + run.text.length, 0);
+  const [from, to] =
+    now === undefined ? [0, 0] : shimmerBand(length, now, 4, 1600);
+  return lightRuns(runs, from, to).map((run, i) => (
+    <Text
+      key={i}
+      bold={run.bold}
+      color={run.lit ? lighten(color, 0.25) : color}
+    >
+      {run.text}
+    </Text>
+  ));
+}
+
+/** Sprite sizes in pixels square; the hand-drawn art is 16. */
+export const MAX_SPRITE = 14;
+export const MIN_SPRITE = 10;
+
+/**
+ * How big the characters are drawn for this terminal: they take at most
+ * about a quarter of its height, between MIN_SPRITE and MAX_SPRITE pixels.
+ * Undefined when even the minimum doesn't fit: names and states only.
+ */
+export function spriteSize(
+  columns: number,
+  rows: number,
+  drawing = false,
+): number | undefined {
+  if (columns < (drawing ? 82 : 76)) return undefined;
+  const size = Math.min(MAX_SPRITE, Math.floor(rows * 0.23) * 2);
+  return size >= MIN_SPRITE ? size : undefined;
+}
+
 export function CharacterRow({
   state,
   sprites,
-  compact,
+  size,
   tick,
 }: {
   state: PresentationSnapshot;
   sprites: Record<AgentId, SpriteAnimations>;
-  compact: boolean;
+  /** From spriteSize(); undefined shows names and states only. */
+  size: number | undefined;
   tick: number;
 }) {
+  const compact = size === undefined;
   const reducedMotion =
     useIsScreenReaderEnabled() || process.env.NO_COLOR !== undefined;
   const drawing = state.drawing?.status === 'running';
@@ -167,21 +244,18 @@ export function CharacterRow({
       ) as Record<AgentId, FloorAnimation>,
     [sprites],
   );
-  return (
+  const agents = (
     <Box
       justifyContent="center"
+      flexGrow={drawing ? 1 : 0}
+      minWidth={0}
       columnGap={drawing ? 0 : compact ? 1 : 3}
       alignItems="center"
       rowGap={0}
       flexShrink={0}
       flexWrap={compact && !drawing ? 'wrap' : 'nowrap'}
     >
-      {(drawing
-        ? [...agentIds.slice(0, 2), 'korg' as const, ...agentIds.slice(2)]
-        : agentIds
-      ).map((id) => {
-        if (id === 'korg')
-          return <Korg key={id} tick={tick} reducedMotion={reducedMotion} />;
+      {agentIds.map((id) => {
         const frame = clocks[id].frame(tick, speaker === id, reducedMotion);
         const colors = theme.agents[id];
         const dimmed = drawing || (speaker !== undefined && speaker !== id);
@@ -196,15 +270,14 @@ export function CharacterRow({
             flexDirection="column"
             alignItems="center"
           >
-            {!compact && <Avatar frame={frame} dimmed={dimmed} />}
+            {size !== undefined && (
+              <Avatar frame={scaleFrame(frame, size)} dimmed={dimmed} />
+            )}
             <Text
               color={dimmed ? dimAvatarColor(colors.light) : colors.light}
               bold
             >
-              {identities[id].name}{' '}
-              <Text color={dimmed ? dimAvatarColor(theme.muted) : theme.muted}>
-                {id}
-              </Text>
+              {identities[id].name}
             </Text>
             <Text
               color={
@@ -223,16 +296,30 @@ export function CharacterRow({
       })}
     </Box>
   );
+  if (!drawing) return agents;
+  // Korg stands in the right-hand corner while drawing. A matching space on
+  // the left keeps the four centered where they normally stand; it gives way
+  // first when the terminal is narrow.
+  return (
+    <Box flexShrink={0} alignItems="center">
+      {!compact && <Box width={16} flexShrink={1} minWidth={0} />}
+      {agents}
+      <Korg tick={tick} reducedMotion={reducedMotion} size={size} />
+    </Box>
+  );
 }
 
 export function App({
   controller,
   sprites,
   providerLabel,
+  onClose,
 }: {
   controller: ChatController;
   sprites: Record<AgentId, SpriteAnimations>;
   providerLabel: string;
+  /** Called once the chat is saved and closed; without it the app exits. */
+  onClose?: (to: 'quit' | 'lobby') => void;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
   const { exit } = useApp();
@@ -254,15 +341,15 @@ export function App({
   const closeStarted = useRef(false);
   const suggestions = dismissed ? [] : complete(editor.text, editor.cursor);
   const selection = Math.min(selected, Math.max(0, suggestions.length - 1));
-  const compact =
-    columns < (state.drawing?.status === 'running' ? 82 : 76) || rows < 24;
+  const size = spriteSize(columns, rows, state.drawing?.status === 'running');
+  // Sprite rows plus name and state; text-only names may wrap when narrow.
   const characterHeight =
-    state.drawing?.status === 'running'
-      ? 10
-      : compact
-        ? Math.ceil(4 / Math.max(1, Math.floor((columns - 1) / 16))) * 2
-        : 10;
-  const suggestionCount = Math.max(0, Math.min(4, rows - characterHeight - 10));
+    size !== undefined
+      ? size / 2 + 2
+      : state.drawing?.status === 'running'
+        ? 2
+        : Math.ceil(4 / Math.max(1, Math.floor((columns - 1) / 16))) * 2;
+  const suggestionCount = Math.max(0, Math.min(4, rows - characterHeight - 11));
   const suggestionStart = Math.max(0, selection - suggestionCount + 1);
   const visibleSuggestions = suggestions.slice(
     suggestionStart,
@@ -270,10 +357,13 @@ export function App({
   );
   const chatHeight = Math.max(
     1,
-    rows - characterHeight - 9 - visibleSuggestions.length,
+    rows - characterHeight - 11 - visibleSuggestions.length,
   );
-  const bottom = Math.max(0, content.height - chatHeight);
-  const offset = Math.min(scrollTop ?? bottom, bottom);
+  const {
+    bottom,
+    offset,
+    top: contentTop,
+  } = chatPosition(content.height, chatHeight, scrollTop);
   /** Scrolling back to the bottom resumes following the live discussion. */
   const scrollBy = (lines: number) => {
     const next = Math.max(0, Math.min(bottom, offset + lines));
@@ -294,38 +384,42 @@ export function App({
     };
   }, [stdout]);
 
+  const drawing = state.drawing?.status === 'running';
+  // Faster frames while text shimmers: a reply being spoken, or Korg drawing.
+  const shimmering =
+    drawing || (state.displaying !== undefined && state.room.mode !== 'paused');
   useEffect(() => {
     if (reducedMotion) return;
-    const timer = setInterval(
-      () => setTick(Date.now()),
-      state.drawing?.status === 'running' ? 50 : 100,
-    );
+    const timer = setInterval(() => setTick(Date.now()), shimmering ? 50 : 100);
     return () => clearInterval(timer);
-  }, [reducedMotion, state.drawing?.status]);
+  }, [reducedMotion, shimmering]);
   useEffect(() => {
-    if (
-      reducedMotion ||
-      state.room.mode === 'paused' ||
-      state.displaying === undefined
-    )
-      return;
+    if (reducedMotion || !shimmering) return;
     const timer = setInterval(() => setPulse((value) => (value + 1) % 4), 250);
-    return () => clearInterval(timer);
-  }, [reducedMotion, state.room.mode, state.displaying]);
-
-  const quit = useCallback(() => {
-    if (closeStarted.current) return;
-    closeStarted.current = true;
-    void controller.close().then(
-      () => exit(),
-      (error: unknown) =>
-        exit(error instanceof Error ? error : new Error('Could not save.')),
-    );
-  }, [controller, exit]);
-  useEffect(() => {
-    process.on('SIGTERM', quit);
     return () => {
-      process.off('SIGTERM', quit);
+      clearInterval(timer);
+      // A still orb is always full size, never frozen mid-shrink.
+      setPulse(0);
+    };
+  }, [reducedMotion, shimmering]);
+
+  const quit = useCallback(
+    (to: 'quit' | 'lobby' = 'quit') => {
+      if (closeStarted.current) return;
+      closeStarted.current = true;
+      void controller.close().then(
+        () => (onClose ? onClose(to) : exit()),
+        (error: unknown) =>
+          exit(error instanceof Error ? error : new Error('Could not save.')),
+      );
+    },
+    [controller, exit, onClose],
+  );
+  useEffect(() => {
+    const terminate = () => quit();
+    process.on('SIGTERM', terminate);
+    return () => {
+      process.off('SIGTERM', terminate);
     };
   }, [quit]);
 
@@ -367,8 +461,10 @@ export function App({
       scrollBy((key.pageUp ? -1 : 1) * Math.max(1, chatHeight - 1));
       return;
     }
+    // Esc closes suggestions first; otherwise it interrupts the discussion.
     if (key.escape) {
-      setDismissed(true);
+      if (suggestions.length) setDismissed(true);
+      else controller.interrupt();
       return;
     }
     if (key.tab && suggestions.length) {
@@ -381,10 +477,7 @@ export function App({
     // Arrows pick a suggestion while the list is open, else scroll the chat.
     if (key.upArrow || key.downArrow) {
       if (suggestions.length) {
-        setSelected(
-          (selection + (key.upArrow ? -1 : 1) + suggestions.length) %
-            suggestions.length,
-        );
+        setSelected(step(selection, key.upArrow ? -1 : 1, suggestions.length));
       } else scrollBy(key.upArrow ? -1 : 1);
       return;
     }
@@ -423,7 +516,8 @@ export function App({
       setDismissed(false);
       setSelected(0);
       setScrollTop(undefined);
-      if (controller.accept(text)) quit();
+      const leaving = controller.accept(text);
+      if (leaving) quit(leaving);
       return;
     }
     const action = key.leftArrow
@@ -453,14 +547,23 @@ export function App({
   });
 
   const window = editorWindow(editor, Math.max(1, columns - 8));
-  const queueLabel = state.queued.length
-    ? `${state.queued.length} queued${state.room.mode === 'paused' ? ' · paused' : state.question ? ' · held for your answer' : ''} · ${state.queued[0]!.text}`
-    : state.room.queue.length
-      ? `Next: ${state.room.queue.map((id) => identities[id].name).join(' → ')}`
-      : ' ';
-  const notice =
-    state.drawing?.status === 'running'
-      ? `${state.drawing.message} · All agents paused`
+  // Left of the calls/speed line: who speaks next.
+  const queueLabel =
+    scrollTop !== undefined
+      ? 'Reading history · Ctrl+End to follow live'
+      : state.drawing?.status === 'running'
+        ? 'Paused'
+        : state.queued.length
+          ? visibleText(
+              `${state.queued.length} queued${state.room.mode === 'paused' ? ' · paused' : state.question ? ' · held for your answer' : ''} · ${state.queued[0]!.text}`,
+            )
+          : state.room.queue.length
+            ? `Next: ${state.room.queue.map((id) => identities[id].name).join(' → ')}`
+            : ' ';
+  const notice = state.closing
+    ? 'Saving…'
+    : state.drawing?.status === 'running'
+      ? 'Drawing maps · All agents paused'
       : state.question
         ? `${identities[state.question.agent].name} is waiting for your reply`
         : state.room.mode === 'paused'
@@ -478,26 +581,29 @@ export function App({
       backgroundColor={theme.background}
       paddingX={1}
     >
-      <Box height={1} justifyContent="space-between" flexShrink={0}>
+      {/* Breathing room above and beside the header. */}
+      <Box height={1} flexShrink={0} />
+      <Box height={1} flexShrink={0} paddingX={1}>
         <Text color={theme.bright} bold>
           THE IDIOTS
         </Text>
-        <Text color={theme.text} wrap="truncate">
-          {roomLabel(state)} · {state.room.callsUsed}/{state.room.callLimit}{' '}
-          calls ·{' '}
-          {state.wordsPerMinute ? `${state.wordsPerMinute} wpm` : 'instant'}
-        </Text>
       </Box>
-      <Box height={1} flexShrink={0}>
+      <Box height={1} flexShrink={0} paddingX={1}>
         <Text color={theme.muted} wrap="truncate">
           {visibleText(providerLabel)}
         </Text>
       </Box>
-      <Box height={chatHeight} flexShrink={0} overflow="hidden" marginTop={1}>
+      {/* Divides the header from the chat, in the row its margin used. */}
+      <Box height={1} flexShrink={0}>
+        <Text color={theme.border} wrap="truncate">
+          {'─'.repeat(Math.max(1, columns - 2))}
+        </Text>
+      </Box>
+      <Box height={chatHeight} flexShrink={0} overflow="hidden">
         <Box
           ref={contentRef}
           position="absolute"
-          top={-offset}
+          top={contentTop}
           width={Math.max(1, columns - 2)}
           flexDirection="column"
         >
@@ -514,61 +620,113 @@ export function App({
           )}
           {state.messages.map((message) => {
             const id =
-              message.speaker !== 'user' && message.speaker !== 'system'
+              message.speaker !== 'user' &&
+              message.speaker !== 'system' &&
+              message.speaker !== 'korg'
                 ? message.speaker
                 : undefined;
+            const korg = message.speaker === 'korg';
             const colors = id ? theme.agents[id] : undefined;
             const active = message.key === state.activeKey;
+            // Korg reports drawing results under his own silver orb.
             const orb = colors
               ? active
-                ? [colors.base, colors.light, colors.glow, colors.light][pulse]!
+                ? colors.light
                 : colors.base
-              : theme.muted;
+              : korg
+                ? theme.text
+                : theme.muted;
             const name = id
               ? identities[id].name
               : message.speaker === 'user'
                 ? 'You'
-                : 'Room';
+                : korg
+                  ? 'Korg'
+                  : 'Room';
             return (
               <Box key={message.key} flexDirection="column" marginBottom={1}>
-                <Text color={colors?.light ?? theme.bright}>
+                <Text
+                  color={colors?.light ?? (korg ? theme.text : theme.bright)}
+                >
                   <Text color={message.speaker === 'user' ? theme.bright : orb}>
-                    {message.speaker === 'system' ? '·' : '●'}
+                    {message.speaker === 'system'
+                      ? '·'
+                      : active
+                        ? ORB_SIZES[pulse]
+                        : '●'}
                   </Text>{' '}
-                  {name}
-                  {active ? ' · speaking' : ''}
+                  <Shimmer
+                    runs={[
+                      {
+                        text: `${name}${active ? ' · speaking' : ''}`,
+                        bold: false,
+                      },
+                    ]}
+                    color={colors?.light ?? (korg ? theme.text : theme.bright)}
+                    now={
+                      active && !reducedMotion && state.room.mode !== 'paused'
+                        ? tick
+                        : undefined
+                    }
+                  />
                   {message.failed ? ' · interrupted' : ''}
                 </Text>
-                <Text
-                  color={
-                    message.speaker === 'system' ? theme.muted : theme.text
-                  }
-                >
-                  {boldRuns(visibleText(message.text), !message.complete).map(
-                    (run, i) => (
-                      <Text key={i} bold={run.bold}>
-                        {run.text}
-                      </Text>
-                    ),
+                {/* Text lines up with the name, past the orb; same margin right. */}
+                <Box flexDirection="column" paddingX={MESSAGE_INDENT}>
+                  <Text
+                    color={
+                      message.speaker === 'system' ? theme.muted : theme.text
+                    }
+                  >
+                    {boldRuns(visibleText(message.text), !message.complete).map(
+                      (run, i) => (
+                        <Text key={i} bold={run.bold}>
+                          {run.text}
+                        </Text>
+                      ),
+                    )}
+                  </Text>
+                  {message.link && (
+                    <DrawingLink
+                      label={message.link.label}
+                      url={message.link.url}
+                    />
                   )}
-                </Text>
-                {message.link && (
-                  <DrawingLink
-                    label={message.link.label}
-                    url={message.link.url}
-                  />
-                )}
+                </Box>
               </Box>
             );
           })}
+          {drawing && state.drawing?.status === 'running' && (
+            <Box flexDirection="column" marginBottom={1}>
+              <Text color={theme.text}>
+                <Text color={theme.text}>{ORB_SIZES[pulse]}</Text>{' '}
+                <Shimmer
+                  runs={[{ text: 'Korg · drawing', bold: false }]}
+                  color={theme.text}
+                  now={reducedMotion ? undefined : tick}
+                />
+              </Text>
+              <Box paddingX={MESSAGE_INDENT}>
+                <Text color={theme.text}>
+                  {visibleText(state.drawing.message)}
+                </Text>
+              </Box>
+            </Box>
+          )}
         </Box>
       </Box>
-      <Box height={1} flexShrink={0}>
-        <Text color={theme.muted} wrap="truncate">
-          {scrollTop !== undefined
-            ? 'Reading history · Ctrl+End to follow live'
-            : visibleText(queueLabel)}
-        </Text>
+      <Box height={1} flexShrink={0} columnGap={2}>
+        <Box flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text color={theme.text} wrap="truncate">
+            {queueLabel}
+          </Text>
+        </Box>
+        <Box flexShrink={0}>
+          <Text color={theme.text}>
+            {state.room.callsUsed}/{state.room.callLimit} calls ·{' '}
+            {state.wordsPerMinute ? `${state.wordsPerMinute} wpm` : 'instant'}
+          </Text>
+        </Box>
       </Box>
       <Box height={1} flexShrink={0}>
         <Text
@@ -582,12 +740,8 @@ export function App({
           {visibleText(notice)}
         </Text>
       </Box>
-      <CharacterRow
-        state={state}
-        sprites={sprites}
-        compact={compact}
-        tick={tick}
-      />
+      <CharacterRow state={state} sprites={sprites} size={size} tick={tick} />
+      <Box height={1} flexShrink={0} />
       <Box flexDirection="column" flexShrink={0}>
         {visibleSuggestions.map((suggestion, i) => (
           <Box
@@ -632,10 +786,10 @@ export function App({
           </Text>
         )}
       </Box>
-      <Box height={1} flexShrink={0}>
+      {/* Lines up with the input's › inside the box border. */}
+      <Box height={1} flexShrink={0} paddingLeft={2}>
         <Text color={theme.muted} wrap="truncate">
-          / commands · Enter or Tab complete · ↑↓ or wheel scroll · Ctrl+Q/E
-          slower/faster · Ctrl+R raise hand · Ctrl+C quit
+          /commands · Esc interrupt · Ctrl+R raise hand · Ctrl+C quit
         </Text>
       </Box>
     </Box>

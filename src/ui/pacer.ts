@@ -49,6 +49,8 @@ export class Pacer {
   #spokeLast = false;
   #paused = false;
   #disposed = false;
+  /** skip(): show everything queued at once, until the queue empties. */
+  #skipping = false;
   readonly #pauseWaiters = new Set<() => void>();
   readonly #timers = new Map<ReturnType<typeof setTimeout>, () => void>();
   #showing: string | undefined;
@@ -119,6 +121,17 @@ export class Pacer {
     }
   }
 
+  /** Shows everything queued at once; speech queued later plays as usual. */
+  skip(): void {
+    if (!this.#running) return;
+    this.#skipping = true;
+    for (const [timer, wake] of this.#timers) {
+      clearTimeout(timer);
+      wake();
+    }
+    this.#timers.clear();
+  }
+
   dispose(): void {
     this.#disposed = true;
     this.#showing = undefined;
@@ -142,6 +155,7 @@ export class Pacer {
     this.#running = true;
     void this.#drain().finally(() => {
       this.#running = false;
+      this.#skipping = false;
       // Something may have been queued after the loop's last check.
       if (this.#items.length && !this.#disposed) this.#run();
       else for (const resolve of this.#idleWaiters.splice(0)) resolve();
@@ -156,7 +170,7 @@ export class Pacer {
         this.#write(item.text);
       } else {
         // Instant playback skips the thinking beat too.
-        if (this.#spokeLast && this.#wordsPerMinute > 0)
+        if (this.#spokeLast && this.#wordsPerMinute > 0 && !this.#skipping)
           await this.#sleep(this.#pauseBetweenSpeakersMs);
         await this.#ready();
         if (this.#disposed) break;
@@ -179,7 +193,9 @@ export class Pacer {
     let last = Date.now();
     while (true) {
       // Read every frame, so a speed change applies mid-reply.
-      const charsPerSecond = (this.#wordsPerMinute * CHARS_PER_WORD) / 60;
+      const charsPerSecond = this.#skipping
+        ? 0
+        : (this.#wordsPerMinute * CHARS_PER_WORD) / 60;
       const maxPerFrame = Math.max(1, (charsPerSecond * FRAME_MS * 2) / 1000);
       if (this.#paused) {
         await this.#ready();

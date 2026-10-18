@@ -5,20 +5,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildExcalidrawScene } from '../dist/rendering/buildExcalidrawScene.js';
-import { exportExcalidraw } from '../dist/rendering/exportExcalidraw.js';
-import { defaultPresentation } from '../dist/rendering/presentation.js';
-import { terminalMaps } from '../dist/rendering/terminalMaps.js';
+import { buildExcalidrawScene } from '../dist/drawing/excalidraw/rendering/buildExcalidrawScene.js';
+import { exportExcalidraw } from '../dist/drawing/excalidraw/rendering/exportExcalidraw.js';
+import { defaultPresentation } from '../dist/drawing/excalidraw/rendering/presentation.js';
+import { terminalMaps } from '../dist/drawing/excalidraw/rendering/terminalMaps.js';
 
 const knowledge = JSON.parse(
   await readFile(
-    new URL('./fixtures/step1-knowledge.json', import.meta.url),
+    new URL('./pipeline/fixtures/step1-knowledge.json', import.meta.url),
     'utf8',
   ),
 );
 const planning = JSON.parse(
   await readFile(
-    new URL('./fixtures/step2-planning.json', import.meta.url),
+    new URL('./pipeline/fixtures/step2-planning.json', import.meta.url),
     'utf8',
   ),
 );
@@ -76,7 +76,7 @@ test('CLI ingests discussion.log from a session envelope and emits machine-reada
   const parent = await mkdtemp(join(tmpdir(), 'i4s-session-render-'));
   const log = JSON.parse(
     await readFile(
-      new URL('../fixtures/conversation.seed.json', import.meta.url),
+      new URL('./pipeline/fixtures/conversation.seed.json', import.meta.url),
       'utf8',
     ),
   );
@@ -92,8 +92,8 @@ test('CLI ingests discussion.log from a session envelope and emits machine-reada
     process.execPath,
     [
       '--import',
-      fileURLToPath(new URL('./fake-openai.mjs', import.meta.url)),
-      'dist/cli.js',
+      new URL('./pipeline/fake-openai.mjs', import.meta.url).href,
+      'dist/drawing/excalidraw/cli.js',
       '--session-file',
       sessionFile,
       '--progress-json',
@@ -326,7 +326,7 @@ test('CLI exports saved run artifacts and prints the path without a provider or 
   const result = spawnSync(
     process.execPath,
     [
-      'dist/cli.js',
+      'dist/drawing/excalidraw/cli.js',
       '--render-run',
       directory,
       '--deterministic',
@@ -338,7 +338,9 @@ test('CLI exports saved run artifacts and prints the path without a provider or 
   assert.equal(result.status, 0, result.stderr);
   const outputPath = result.stdout.trim().replace('Plan saved: ', '');
   assert.ok(outputPath.startsWith(join(directory, 'exports')));
-  assert.ok(outputPath.endsWith('/project-plan.excalidraw'));
+  assert.ok(
+    outputPath.replaceAll('\\', '/').endsWith('/project-plan.excalidraw'),
+  );
   assert.ok(
     JSON.parse(await readFile(join(outputPath, '..', 'step3.json'), 'utf8'))
       .elementCount,
@@ -351,8 +353,8 @@ test('normal CLI runs produce an Excalidraw file automatically after successful 
     process.execPath,
     [
       '--import',
-      fileURLToPath(new URL('./fake-openai.mjs', import.meta.url)),
-      'dist/cli.js',
+      new URL('./pipeline/fake-openai.mjs', import.meta.url).href,
+      'dist/drawing/excalidraw/cli.js',
       '--out',
       parent,
     ],
@@ -363,7 +365,7 @@ test('normal CLI runs produce an Excalidraw file automatically after successful 
   );
   assert.equal(result.status, 0, result.stderr);
   const path = result.stdout.trim().replace('Plan saved: ', '');
-  assert.ok(path.endsWith('/project-plan.excalidraw'));
+  assert.ok(path.replaceAll('\\', '/').endsWith('/project-plan.excalidraw'));
   const scene = JSON.parse(await readFile(path, 'utf8'));
   assert.equal(scene.type, 'excalidraw');
   assert.equal(
@@ -401,7 +403,9 @@ test('CLI can restyle a saved presentation in a new folder without credentials o
   const result = spawnSync(
     process.execPath,
     [
-      fileURLToPath(new URL('../dist/cli.js', import.meta.url)),
+      fileURLToPath(
+        new URL('../dist/drawing/excalidraw/cli.js', import.meta.url),
+      ),
       '--render-run',
       source,
       '--reuse-presentation',
@@ -421,7 +425,7 @@ test('CLI can restyle a saved presentation in a new folder without credentials o
     await readFile(join(source, 'step3.presentation.json'), 'utf8'),
     original,
   );
-  assert.ok(path.includes('/exports/'));
+  assert.ok(path.replaceAll('\\', '/').includes('/exports/'));
   const scene = JSON.parse(await readFile(path, 'utf8'));
   assert.ok(
     scene.elements
@@ -445,7 +449,7 @@ test('CLI revalidates raw presentation responses before zero-call recovery', asy
     const result = spawnSync(
       process.execPath,
       [
-        'dist/cli.js',
+        'dist/drawing/excalidraw/cli.js',
         '--render-run',
         source,
         '--reuse-presentation',
@@ -511,7 +515,7 @@ test('CLI can remove old review sections from a saved map without model calls', 
   const result = spawnSync(
     process.execPath,
     [
-      'dist/cli.js',
+      'dist/drawing/excalidraw/cli.js',
       '--render-run',
       source,
       '--reuse-presentation',
@@ -557,7 +561,10 @@ test('CLI can remove old review sections from a saved map without model calls', 
 test('adapter fields agree with the known-good fixture produced by official Excalidraw 0.18.1 helpers', async () => {
   const fixture = JSON.parse(
     await readFile(
-      new URL('./fixtures/excalidraw-0.18.1.excalidraw', import.meta.url),
+      new URL(
+        './pipeline/fixtures/excalidraw-0.18.1.excalidraw',
+        import.meta.url,
+      ),
       'utf8',
     ),
   );

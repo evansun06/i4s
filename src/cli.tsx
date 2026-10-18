@@ -5,9 +5,13 @@ import { join } from 'node:path';
 import {
   isProviderId,
   presets,
+  type ProviderId,
   type ProviderPreset,
 } from './providers/presets.js';
 import type { ModelProvider } from './providers/model.js';
+import type { Session } from './storage/sessions.js';
+import type { ChatController } from './ui/controller.js';
+import type { ApiKey } from './ui/keys.js';
 
 const HELP = `The Idiots — four perspectives.
 
@@ -29,11 +33,13 @@ Usage: i4s [options]
   -h, --help           Show this help
   -v, --version        Show the version
 
-At startup, pick a saved key or paste a new one; the provider is detected
-from the key. Keys in a provider's environment variable (such as
-GEMINI_API_KEY) are used as is. Type /quit or press Ctrl+C to quit.
-/draw pauses the TUI and generates maps from the saved session (repository
-checkout; requires excalidraw-pipeline dependencies and an OpenAI key).
+The first time, paste an API key; the provider is detected from it. In the
+lobby, Ctrl+K manages keys: choose the one chats use, add, or remove. Keys in
+a provider's environment variable (such as GEMINI_API_KEY) are used as is.
+Type /quit or press Ctrl+C to quit.
+/draw pauses the TUI and generates maps from the saved session. It uses this
+session's key when you chat with ChatGPT; otherwise OPENAI_API_KEY or a saved
+ChatGPT key.
 `;
 
 async function main() {
@@ -125,24 +131,25 @@ async function main() {
       ? '0'
       : '3';
 
-  const { chooseProvider } = await import('./ui/setup.js');
-  const { provider: providerId, apiKey } = await chooseProvider(requested);
-  const preset: ProviderPreset = presets[providerId];
-  const models = values.model
-    ? { draft: values.model, review: values.model, summary: values.model }
-    : preset.models;
-  if (!models) throw new Error(`${preset.label} needs --model.`);
-
-  let provider: ModelProvider;
-  if (preset.api === 'anthropic') {
-    const { AnthropicProvider } = await import('./providers/anthropic.js');
-    provider = new AnthropicProvider({ apiKey, models });
-  } else {
+  const { AnthropicProvider } = await import('./providers/anthropic.js');
+  const { OpenAICompatibleProvider } =
+    await import('./providers/openai-compatible.js');
+  const modelsFor = (preset: ProviderPreset) => {
+    const models = values.model
+      ? { draft: values.model, review: values.model, summary: values.model }
+      : preset.models;
+    if (!models) throw new Error(`${preset.label} needs --model.`);
+    return models;
+  };
+  /** The model client for a provider's key; throws when flags are missing. */
+  const connect = (providerId: ProviderId, apiKey: string): ModelProvider => {
+    const preset: ProviderPreset = presets[providerId];
+    const models = modelsFor(preset);
+    if (preset.api === 'anthropic')
+      return new AnthropicProvider({ apiKey, models });
     const baseUrl = values['base-url'] ?? preset.baseUrl;
     if (!baseUrl) throw new Error(`${preset.label} needs --base-url.`);
-    const { OpenAICompatibleProvider } =
-      await import('./providers/openai-compatible.js');
-    provider = new OpenAICompatibleProvider({
+    return new OpenAICompatibleProvider({
       baseUrl,
       apiKey,
       models,
@@ -150,80 +157,118 @@ async function main() {
       ...(preset.extraBody && { extraBody: preset.extraBody }),
       ...(preset.highEffort && { highEffort: preset.highEffort }),
     });
-  }
-
-  process.stdout.write(`Using ${preset.label} (${models.draft}).\n`);
-  const { chooseSession } = await import('./ui/setup.js');
-  const { newSessionId, saveSession, titleFor } =
-    await import('./storage/sessions.js');
-  const session = await chooseSession();
-
-  const { Orchestrator } = await import('./core/orchestrator.js');
-  const orchestrator = new Orchestrator({
-    agents: panel,
-    provider,
-    callLimit,
-    ...(session && { restore: session.discussion }),
-  });
-  // A flag given now wins over what the discussion was saved with.
-  if (values.angry) orchestrator.setAngry(true);
-  for (const { target, value } of temperatures) {
-    orchestrator.setTemperature(target, value);
-  }
-  const id = session?.id ?? newSessionId();
-  const createdAt = session?.createdAt ?? new Date().toISOString();
-  const save = async () => {
-    const discussion = orchestrator.save();
-    if (!discussion.log.length) return;
-    await saveSession({
-      version: 1,
-      id,
-      title: session?.title ?? titleFor(discussion),
-      createdAt,
-      updatedAt: new Date().toISOString(),
-      discussion,
-    });
   };
+
+  const { listSessions, newSessionId, saveSession, titleFor, SESSIONS_DIR } =
+    await import('./storage/sessions.js');
+  const { Orchestrator } = await import('./core/orchestrator.js');
+  /** A room for a new (undefined) or saved discussion, and how to save it. */
+  const openRoom = (session: Session | undefined, provider: ModelProvider) => {
+    const orchestrator = new Orchestrator({
+      agents: panel,
+      provider,
+      callLimit,
+      ...(session && { restore: session.discussion }),
+    });
+    // A flag given now wins over what the discussion was saved with.
+    if (values.angry) orchestrator.setAngry(true);
+    for (const { target, value } of temperatures) {
+      orchestrator.setTemperature(target, value);
+    }
+    const id = session?.id ?? newSessionId();
+    const createdAt = session?.createdAt ?? new Date().toISOString();
+    const save = async () => {
+      const discussion = orchestrator.save();
+      if (!discussion.log.length) return;
+      await saveSession({
+        version: 1,
+        id,
+        title: session?.title ?? titleFor(discussion),
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        discussion,
+      });
+    };
+    return { orchestrator, id, save };
+  };
+
   if (values.plain) {
+    const { chooseProvider, chooseSession } = await import('./ui/setup.js');
+    const { provider: providerId, apiKey } = await chooseProvider(requested);
+    const provider = connect(providerId, apiKey);
+    process.stdout.write(
+      `Using ${presets[providerId].label} (${modelsFor(presets[providerId]).draft}).\n`,
+    );
+    const { orchestrator, save } = openRoom(await chooseSession(), provider);
     const { runPlain } = await import('./ui/plain.js');
     try {
       await runPlain(orchestrator, panel, { wordsPerMinute, afterRound: save });
     } finally {
       orchestrator.dispose();
     }
-  } else {
-    const { SESSIONS_DIR } = await import('./storage/sessions.js');
-    const { createDrawingPipeline } = await import('./drawing/pipeline.js');
-    const { render } = await import('ink');
-    const { App } = await import('./ui/app.js');
-    const { ChatController } = await import('./ui/controller.js');
-    const { loadSprites } = await import('./ui/sprites.js');
-    const sprites = loadSprites();
-    const controller = new ChatController(orchestrator, {
+    return;
+  }
+
+  const { createDrawingPipeline } = await import('./drawing/pipeline.js');
+  const { render } = await import('ink');
+  const { Shell } = await import('./ui/shell.js');
+  const { ChatController } = await import('./ui/controller.js');
+  const { createKeyStore, MENU_PROVIDERS } = await import('./ui/keys.js');
+  const { loadSprites } = await import('./ui/sprites.js');
+  const sprites = loadSprites();
+  const keys = createKeyStore({
+    providers:
+      requested && !(MENU_PROVIDERS as readonly string[]).includes(requested)
+        ? [...MENU_PROVIDERS, requested]
+        : MENU_PROVIDERS,
+  });
+  // The open chat: closed (and saved) on exit unless the screen already did.
+  let current: ChatController | undefined;
+  const openChat = (session: Session | undefined, key: ApiKey) => {
+    const { orchestrator, id, save } = openRoom(
+      session,
+      connect(key.provider, key.apiKey),
+    );
+    current = new ChatController(orchestrator, {
       wordsPerMinute,
       save,
       draw: createDrawingPipeline({
         sessionFile: join(SESSIONS_DIR, `${id}.json`),
         outputDirectory: join(SESSIONS_DIR, `${id}-draws`),
+        // The chat's own key when chatting with ChatGPT; otherwise any other
+        // OpenAI key the app can use (environment, keychain, this session).
+        openAiKey: async () =>
+          key.provider === 'openai'
+            ? key.apiKey
+            : (await keys.list()).find(({ provider }) => provider === 'openai')
+                ?.apiKey,
       }),
     });
-    try {
-      await render(
-        <App
-          controller={controller}
-          sprites={sprites}
-          providerLabel={`${preset.label} · ${models.draft}`}
-        />,
-        {
-          alternateScreen: true,
-          incrementalRendering: true,
-          exitOnCtrlC: false,
-          maxFps: 30,
-        },
-      ).waitUntilExit();
-    } finally {
-      await controller.close();
-    }
+    return current;
+  };
+  try {
+    await render(
+      <Shell
+        keys={keys}
+        requested={requested}
+        loadSessions={listSessions}
+        openChat={openChat}
+        labelFor={({ provider }) => {
+          const preset: ProviderPreset = presets[provider];
+          // Missing flags are reported when a chat opens, not here.
+          return `${preset.label} · ${values.model ?? preset.models?.draft ?? 'needs --model'}`;
+        }}
+        sprites={sprites}
+      />,
+      {
+        alternateScreen: true,
+        incrementalRendering: true,
+        exitOnCtrlC: false,
+        maxFps: 30,
+      },
+    ).waitUntilExit();
+  } finally {
+    await current?.close();
   }
 }
 

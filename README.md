@@ -37,9 +37,9 @@ You need an API key from one of these providers:
 | ChatGPT (OpenAI) | `sk-`           | `OPENAI_API_KEY`     |
 | OpenRouter       | `sk-or-`        | `OPENROUTER_API_KEY` |
 
-On first launch, paste your key when asked; the provider is detected from it, and the key is saved to your system keychain. Next time, pick a saved key from the menu or add another. If a provider's environment variable is set, that key is used directly.
+On first launch, paste your key on the welcome screen; the provider is detected from it, and the key is saved to your system keychain. Later, press **Ctrl+K** in the lobby to manage keys: choose which one new chats use, add another, or remove one (Esc goes back). If a provider's environment variable is set, that key is listed too and used as is.
 
-Then pick a new discussion or continue a previous one, and say what you're working on.
+Then the lobby opens: start a new discussion or pick a saved one with ↑↓ and Enter, and say what you're working on. Type `/lobby` in a discussion to save it and come back to the lobby; Esc in the lobby quits.
 
 ## In a discussion
 
@@ -48,17 +48,19 @@ Then pick a new discussion or continue a previous one, and say what you're worki
 - **`@name`** in a message (`@bleu`, `@ruby @jade`) means only those advisors reply that round.
 - **Type while they talk** to queue your next message.
 
-| Command                           | What it does                                                                                  |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `/think [agents] <message>`       | Have advisors think deeply before answering, e.g. `/think bleu how should I price this?`      |
-| `/temp [agent\|all] [0–1\|reset]` | Boldness: 0 is generic, 0.5 is normal, 1 is full personality                                  |
-| `/new <message>`                  | Set a pending question aside and talk to everyone                                             |
-| `/pause`, `/resume`               | Pause and resume the room                                                                     |
-| `/draw`                           | Pause and generate Decision/Implementation maps from this saved session (repository checkout) |
-| `/budget <calls>`                 | Raise the call limit for this session                                                         |
-| `/queue`, `/unqueue`              | Show or remove queued messages                                                                |
-| `/help`                           | Commands and keyboard controls                                                                |
-| `/quit`                           | Save and exit                                                                                 |
+| Command                           | What it does                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `/about [agent]`                  | Who the advisors are, e.g. `/about @ruby` for one of them                                |
+| `/think [agents] <message>`       | Have advisors think deeply before answering, e.g. `/think bleu how should I price this?` |
+| `/temp [agent\|all] [0–1\|reset]` | Boldness: 0 is generic, 0.5 is normal, 1 is full personality                             |
+| `/new <message>`                  | Set a pending question aside and talk to everyone                                        |
+| `/pause`, `/resume`               | Pause and resume the room                                                                |
+| `/draw`                           | Pause and generate Decision/Implementation maps from this saved session                  |
+| `/budget <calls>`                 | Raise the call limit for this session                                                    |
+| `/queue`, `/unqueue`              | Show or remove queued messages                                                           |
+| `/help`                           | Commands and keyboard controls                                                           |
+| `/lobby`                          | Save and return to the lobby                                                             |
+| `/quit`                           | Save and exit                                                                            |
 
 | Key             | What it does                                                                      |
 | --------------- | --------------------------------------------------------------------------------- |
@@ -68,19 +70,20 @@ Then pick a new discussion or continue a previous one, and say what you're worki
 | PgUp / PgDn     | Scroll a page; Ctrl+End jumps back to live                                        |
 | Ctrl+Q / Ctrl+E | Slower / faster reading speed, any time, even mid-reply (Alt+Q / Alt+E also work) |
 | Ctrl+P / Ctrl+N | Previous / next message you sent                                                  |
+| Esc             | Interrupt: everyone stops now and it's your turn; while drawing, cancels `/draw`  |
 | Ctrl+R          | Raise your hand: you speak after the current speaker                              |
 | Ctrl+C          | Save and quit                                                                     |
 
 The reading speed shows in the top bar. Terminals never pass the Command key through to apps, so the speed keys use Ctrl (or Alt) on every platform. While the app is open it handles the mouse wheel itself, so in most terminals hold Shift to select text with the mouse.
 
-## Drawing maps (repository checkout)
+## Drawing maps
 
-From a checkout, install both components with `npm ci` at the repository root and
-`npm ci --prefix excalidraw-pipeline`. Configure `OPENAI_API_KEY` in your shell or
-`excalidraw-pipeline/.env`. Drawing uses the existing OpenAI pipeline and its
-`gpt-6-luna` default, independently of the discussion provider; a saved Gemini or
-Claude key does not configure drawing. The published npm package does not yet
-bundle this experimental pipeline.
+Drawing ships with the app; there is nothing extra to install. It uses OpenAI
+(the `gpt-6-luna` model) whichever provider you chat with. When you chat with
+ChatGPT, `/draw` uses that session's key. Otherwise it uses `OPENAI_API_KEY`
+from your shell, or a ChatGPT key saved from an earlier session; a Gemini or
+Claude key cannot draw. The key reaches the drawing process only through its
+environment, never a file.
 
 In the full TUI, type `/draw`. The app pauses the agents and playback, saves the
 session, and passes that file's `discussion.log` to the pipeline. Only committed
@@ -119,7 +122,8 @@ importer, with no sharing-service upload or raw conversation. The online app can
 read that drawing, and browser history may retain the URL. Online edits do not
 overwrite local runs. Import the native file manually if a browser blocks the handoff.
 The link needs no additional dependencies or model calls. Old run files are retained.
-The existing standalone pipeline command still works. `/draw` is
+From a checkout, `npm run pipeline` still runs the pipeline on its own (see
+[docs/drawing-pipeline.md](docs/drawing-pipeline.md)). `/draw` is
 not sent to the discussion agents and is not available in `--plain` mode.
 
 Session storage is `~/.the-idiots/sessions/` (a hidden directory). On macOS, open it

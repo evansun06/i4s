@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { ingestConversation } from '../dist/conversation.js';
+import { ingestConversation } from '../../dist/drawing/excalidraw/conversation.js';
 
 export const specification = readFileSync(
   new URL('../../docs/excalidraw.md', import.meta.url),
@@ -17,7 +17,7 @@ export function seedConversation() {
   return ingestConversation(
     JSON.parse(
       readFileSync(
-        new URL('../fixtures/conversation.seed.json', import.meta.url),
+        new URL('./fixtures/conversation.seed.json', import.meta.url),
         'utf8',
       ),
     ),

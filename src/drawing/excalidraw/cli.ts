@@ -33,7 +33,8 @@ import { normalizeRenderingInputs } from './rendering/readableScene.js';
 import { terminalMaps } from './rendering/terminalMaps.js';
 import { exportOnlineEdit } from './rendering/onlineEdit.js';
 
-const root = new URL('../', import.meta.url);
+// The repository (or installed package) root: src|dist/drawing/excalidraw/.
+const root = new URL('../../../', import.meta.url);
 async function main() {
   const started = performance.now();
   const requests: ModelMeasurement[] = [];
@@ -219,10 +220,12 @@ async function main() {
   const inputPath =
     values.input || values['session-file']
       ? resolve(values.input ?? values['session-file']!)
-      : fileURLToPath(new URL('fixtures/conversation.seed.json', root));
+      : fileURLToPath(
+          new URL('tests/pipeline/fixtures/conversation.seed.json', root),
+        );
   const specificationPath = values.spec
     ? resolve(values.spec)
-    : fileURLToPath(new URL('../docs/excalidraw.md', root));
+    : fileURLToPath(new URL('docs/excalidraw.md', root));
   const [inputText, specification] = await Promise.all([
     readFile(inputPath, 'utf8'),
     readFile(specificationPath, 'utf8'),

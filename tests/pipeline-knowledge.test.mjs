@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { reconcileKnowledge } from '../dist/step1/reconcile.js';
-import { validateKnowledge } from '../dist/step1/validate.js';
+import { reconcileKnowledge } from '../dist/drawing/excalidraw/step1/reconcile.js';
+import { validateKnowledge } from '../dist/drawing/excalidraw/step1/validate.js';
 import {
   baseObject,
   proposal,
@@ -9,7 +9,7 @@ import {
   inputFrom,
   bookSwap,
   seedConversation,
-} from './helpers.mjs';
+} from './pipeline/helpers.mjs';
 
 test('missing annotation evidence flags agent-message coverage without inventing an opinion', () => {
   const input = inputFrom([

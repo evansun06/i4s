@@ -77,6 +77,18 @@ export function dimAvatarColor(hex: string): string {
     .join('')}`;
 }
 
+/** A lighter shade of a color: `amount` of the way to white. */
+export function lighten(hex: string, amount = 0.5): string {
+  return `#${[1, 3, 5]
+    .map((at) => {
+      const channel = parseInt(hex.slice(at, at + 2), 16);
+      return Math.round(channel + (255 - channel) * amount)
+        .toString(16)
+        .padStart(2, '0');
+    })
+    .join('')}`;
+}
+
 /** Strip terminal controls from user/model text before rendering it. */
 export function visibleText(text: string): string {
   return Array.from(stripVTControlCharacters(text))

@@ -15,21 +15,21 @@ The current display contract follows the user's simplified-map amendment in
 
 ## Run
 
-Use Node.js 24. Install and run from this directory:
+The pipeline lives in `src/drawing/excalidraw/` and is built, linted and tested
+with the rest of the app; the TUI's `/draw` runs it. To run it on its own, use
+Node.js 24 from the repository root after `npm ci`:
 
 ```sh
-cd excalidraw-pipeline
-npm ci
 npm run pipeline
 ```
 
-The default performs real model processing. Configure `OPENAI_API_KEY` locally
-in this directory's `.env` file or your shell environment before running. The
-npm script loads `.env` automatically when it exists. Without a key it saves a
-failure report and makes zero calls.
+The default performs real model processing. Set `OPENAI_API_KEY` in your shell
+before running it standalone; `.env` files are not read. (In the TUI, `/draw`
+passes the session's OpenAI key itself.) Without a key it saves a failure report
+and makes zero calls.
 There is no fixture-replay or prewritten-output fallback.
 
-The default input is `fixtures/conversation.seed.json`, following the EventBus
+The default input is `tests/pipeline/fixtures/conversation.seed.json`, following the EventBus
 format in `jacob/log_usage.txt`: `id`, `kind`, `text`, agent identity, and
 optional user `replyTo`. You can also ingest the document's native
 `ConversationInput` envelope with attributed, ordered messages:
@@ -100,14 +100,14 @@ every message requires an annotation. Extraction explicitly reviews every agent 
 
 | Responsibility                                                         | Implementation                                |
 | ---------------------------------------------------------------------- | --------------------------------------------- |
-| Domain contracts and runtime schemas                                   | `src/contracts/domain.ts`, `src/contracts.ts` |
-| Ordered input adaptation and validation                                | `src/conversation.ts`                         |
-| Extraction, independent builders, and stage orchestration              | `src/finalOrchestrator.ts`                    |
-| Canonical decision projection (no model)                                | `src/step2/buildDecisionGraph.ts`             |
-| Compact model-only context views                                        | `src/modelContext.ts`                        |
-| Canonical reconciliation and source/authority validation               | `src/step1/`                                  |
-| Annotation/cross-graph linking, graph reconciliation, final validation | `src/step2/`                                  |
-| Standalone file input/output and dependency wiring                     | `src/cli.ts`                                  |
+| Domain contracts and runtime schemas                                   | `src/drawing/excalidraw/contracts/domain.ts`, `src/drawing/excalidraw/contracts.ts` |
+| Ordered input adaptation and validation                                | `src/drawing/excalidraw/conversation.ts`                         |
+| Extraction, independent builders, and stage orchestration              | `src/drawing/excalidraw/finalOrchestrator.ts`                    |
+| Canonical decision projection (no model)                                | `src/drawing/excalidraw/step2/buildDecisionGraph.ts`             |
+| Compact model-only context views                                        | `src/drawing/excalidraw/modelContext.ts`                        |
+| Canonical reconciliation and source/authority validation               | `src/drawing/excalidraw/step1/`                                  |
+| Annotation/cross-graph linking, graph reconciliation, final validation | `src/drawing/excalidraw/step2/`                                  |
+| Standalone file input/output and dependency wiring                     | `src/drawing/excalidraw/cli.ts`                                  |
 
 `FinalOrchestrator` exposes `extractConversation`, `buildPlanningGraphs`, and
 `processConversation` following §5.3. Contracts and deterministic operations are

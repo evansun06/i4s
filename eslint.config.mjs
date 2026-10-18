@@ -12,7 +12,7 @@ export default defineConfig(
       'node_modules/**',
       'coverage/**',
       '.idle-preview/**',
-      'excalidraw-pipeline/**',
+      'runs/**',
     ],
   },
   {

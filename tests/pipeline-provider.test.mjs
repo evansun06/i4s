@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OpenAICompatibleProvider } from '../dist/provider.js';
-import { generateStructured } from '../dist/model.js';
-import { normalizeWireValue } from '../dist/contracts.js';
-import { strictWireSchema } from '../dist/contracts.js';
-import { modelWireSchema } from '../dist/wireSchema.js';
+import { OpenAICompatibleProvider } from '../dist/drawing/excalidraw/provider.js';
+import { generateStructured } from '../dist/drawing/excalidraw/model.js';
+import { normalizeWireValue } from '../dist/drawing/excalidraw/contracts.js';
+import { strictWireSchema } from '../dist/drawing/excalidraw/contracts.js';
+import { modelWireSchema } from '../dist/drawing/excalidraw/wireSchema.js';
 
 const schema = {
   type: 'object',
