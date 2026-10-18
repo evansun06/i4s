@@ -28,7 +28,7 @@ Usage: i4s [options]
 
 At startup, pick a saved key or paste a new one; the provider is detected
 from the key. Keys in a provider's environment variable (such as
-GEMINI_API_KEY) are used as is. Press q or Ctrl+C to quit.
+GEMINI_API_KEY) are used as is. Type /quit or press Ctrl+C to quit.
 `;
 
 async function main() {
@@ -90,15 +90,8 @@ async function main() {
     throw new Error('Run i4s in an interactive terminal, or use --help.');
   }
 
-  if (!values.plain) {
-    const { render } = await import('ink');
-    const { App } = await import('./ui/app.js');
-    await render(<App />).waitUntilExit();
-    return;
-  }
-
   const callLimit = Number(values['call-limit'] ?? 100);
-  if (!Number.isInteger(callLimit) || callLimit <= 0) {
+  if (!Number.isSafeInteger(callLimit) || callLimit <= 0) {
     throw new Error('--call-limit must be a positive whole number.');
   }
   const wordsPerMinute = Number(values.wpm ?? 340);
@@ -119,6 +112,12 @@ async function main() {
       '--temperature takes 0 to 1, e.g. "0.7" or "yellow=0.9,blue=0.2".',
     );
   }
+
+  // The art and UI use exact RGB values from the checked-in palette.
+  process.env.FORCE_COLOR =
+    process.env.NO_COLOR !== undefined || process.env.FORCE_COLOR === '0'
+      ? '0'
+      : '3';
 
   const { chooseProvider } = await import('./ui/setup.js');
   const { provider: providerId, apiKey } = await chooseProvider(requested);
@@ -154,7 +153,6 @@ async function main() {
   const session = await chooseSession();
 
   const { Orchestrator } = await import('./core/orchestrator.js');
-  const { runPlain } = await import('./ui/plain.js');
   const orchestrator = new Orchestrator({
     agents: panel,
     provider,
@@ -167,21 +165,53 @@ async function main() {
   }
   const id = session?.id ?? newSessionId();
   const createdAt = session?.createdAt ?? new Date().toISOString();
-  await runPlain(orchestrator, panel, {
-    wordsPerMinute,
-    // Saved after every round, so quitting at any prompt loses nothing.
-    afterRound: async () => {
-      const discussion = orchestrator.save();
-      await saveSession({
-        version: 1,
-        id,
-        title: session?.title ?? titleFor(discussion),
-        createdAt,
-        updatedAt: new Date().toISOString(),
-        discussion,
-      });
-    },
-  });
+  const save = async () => {
+    const discussion = orchestrator.save();
+    if (!discussion.log.length) return;
+    await saveSession({
+      version: 1,
+      id,
+      title: session?.title ?? titleFor(discussion),
+      createdAt,
+      updatedAt: new Date().toISOString(),
+      discussion,
+    });
+  };
+  if (values.plain) {
+    const { runPlain } = await import('./ui/plain.js');
+    try {
+      await runPlain(orchestrator, panel, { wordsPerMinute, afterRound: save });
+    } finally {
+      orchestrator.dispose();
+    }
+  } else {
+    const { render } = await import('ink');
+    const { App } = await import('./ui/app.js');
+    const { ChatController } = await import('./ui/controller.js');
+    const { loadSprites } = await import('./ui/sprites.js');
+    const sprites = loadSprites();
+    const controller = new ChatController(orchestrator, {
+      wordsPerMinute,
+      save,
+    });
+    try {
+      await render(
+        <App
+          controller={controller}
+          sprites={sprites}
+          providerLabel={`${preset.label} · ${models.draft}`}
+        />,
+        {
+          alternateScreen: true,
+          incrementalRendering: true,
+          exitOnCtrlC: false,
+          maxFps: 30,
+        },
+      ).waitUntilExit();
+    } finally {
+      await controller.close();
+    }
+  }
 }
 
 main().catch((error: unknown) => {

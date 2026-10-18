@@ -11,11 +11,18 @@ export interface Utterance {
   finish(): void;
 }
 
+export interface SpeechObserver {
+  start?(): void;
+  text?(text: string): void;
+  finish?(): void;
+}
+
 type Item =
   | { readonly kind: 'line'; readonly text: string }
   | {
       readonly kind: 'speech';
       readonly label: string;
+      readonly observer: SpeechObserver;
       text: string;
       finished: boolean;
       wake?: (() => void) | undefined;
@@ -37,6 +44,10 @@ export class Pacer {
   readonly #idleWaiters: (() => void)[] = [];
   #running = false;
   #spokeLast = false;
+  #paused = false;
+  #disposed = false;
+  readonly #pauseWaiters = new Set<() => void>();
+  readonly #timers = new Map<ReturnType<typeof setTimeout>, () => void>();
 
   constructor(write: (text: string) => void, options: PacerOptions) {
     this.#write = write;
@@ -49,10 +60,11 @@ export class Pacer {
     this.#run();
   }
 
-  speech(label: string): Utterance {
+  speech(label: string, observer: SpeechObserver = {}): Utterance {
     const item: Item & { kind: 'speech' } = {
       kind: 'speech',
       label,
+      observer,
       text: '',
       finished: false,
     };
@@ -79,6 +91,25 @@ export class Pacer {
     this.#spokeLast = false;
   }
 
+  setPaused(paused: boolean): void {
+    this.#paused = paused;
+    if (!paused) {
+      for (const wake of this.#pauseWaiters) wake();
+      this.#pauseWaiters.clear();
+    }
+  }
+
+  dispose(): void {
+    this.#disposed = true;
+    this.setPaused(false);
+    for (const [timer, wake] of this.#timers) {
+      clearTimeout(timer);
+      wake();
+    }
+    this.#timers.clear();
+    for (const item of this.#items) if (item.kind === 'speech') item.wake?.();
+  }
+
   /** Resolves once everything queued has been shown. */
   idle(): Promise<void> {
     if (!this.#running) return Promise.resolve();
@@ -86,32 +117,39 @@ export class Pacer {
   }
 
   #run(): void {
-    if (this.#running) return;
+    if (this.#running || this.#disposed) return;
     this.#running = true;
     void this.#drain().finally(() => {
       this.#running = false;
       // Something may have been queued after the loop's last check.
-      if (this.#items.length) this.#run();
+      if (this.#items.length && !this.#disposed) this.#run();
       else for (const resolve of this.#idleWaiters.splice(0)) resolve();
     });
   }
 
   async #drain(): Promise<void> {
     for (let item = this.#items[0]; item; item = this.#items[0]) {
+      await this.#ready();
+      if (this.#disposed) break;
       if (item.kind === 'line') {
         this.#write(item.text);
       } else {
-        if (this.#spokeLast) await sleep(this.#options.pauseBetweenSpeakersMs);
+        if (this.#spokeLast)
+          await this.#sleep(this.#options.pauseBetweenSpeakersMs);
+        await this.#ready();
+        if (this.#disposed) break;
         await this.#speak(item);
         this.#spokeLast = true;
       }
       this.#items.shift();
     }
+    if (this.#disposed) this.#items.length = 0;
   }
 
   async #speak(item: Item & { kind: 'speech' }): Promise<void> {
     const charsPerSecond = (this.#options.wordsPerMinute * CHARS_PER_WORD) / 60;
     this.#write(item.label);
+    item.observer.start?.();
     let shown = 0;
     // Letter by letter. Timers cannot fire once per letter reliably, so each
     // frame shows however many letters are due by the clock.
@@ -119,10 +157,16 @@ export class Pacer {
     let last = Date.now();
     const maxPerFrame = Math.max(1, (charsPerSecond * FRAME_MS * 2) / 1000);
     while (true) {
+      if (this.#paused) {
+        await this.#ready();
+        last = Date.now();
+      }
+      if (this.#disposed) return;
       if (shown < item.text.length) {
         if (charsPerSecond <= 0) {
           this.#write(item.text.slice(shown));
           shown = item.text.length;
+          item.observer.text?.(item.text.slice(0, shown));
           continue;
         }
         const now = Date.now();
@@ -135,9 +179,10 @@ export class Pacer {
         if (count > 0) {
           this.#write(item.text.slice(shown, shown + count));
           shown += count;
+          item.observer.text?.(item.text.slice(0, shown));
           due -= count;
         }
-        await sleep(FRAME_MS);
+        await this.#sleep(FRAME_MS);
       } else if (item.finished) {
         break;
       } else {
@@ -147,11 +192,22 @@ export class Pacer {
       }
     }
     this.#write('\n\n');
+    item.observer.finish?.();
   }
-}
 
-function sleep(ms: number): Promise<void> {
-  return ms > 0
-    ? new Promise((resolve) => setTimeout(resolve, ms))
-    : Promise.resolve();
+  #ready(): Promise<void> {
+    if (!this.#paused || this.#disposed) return Promise.resolve();
+    return new Promise((wake) => this.#pauseWaiters.add(wake));
+  }
+
+  #sleep(ms: number): Promise<void> {
+    if (ms <= 0 || this.#disposed) return Promise.resolve();
+    return new Promise((wake) => {
+      const timer = setTimeout(() => {
+        this.#timers.delete(timer);
+        wake();
+      }, ms);
+      this.#timers.set(timer, wake);
+    });
+  }
 }

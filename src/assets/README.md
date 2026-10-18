@@ -6,7 +6,6 @@ Character personalities draw on the four color styles in Thomas Erikson's [_Surr
 
 Ruby is direct, decisive, and driven by results, embodying the book's dominant Red style. Ruby takes charge, welcomes challenges, and pushes the discussion toward action, but can come across as impatient or bossy when others need more time. Communicate with Ruby by getting to the point and making the desired outcome clear.
 
-
 ### Bleu (Blue)
 
 Bleu is analytical, methodical, and attentive to detail, embodying the book's careful Blue style. Bleu checks facts, questions assumptions, and values accuracy, but can get caught in perfectionism or delay decisions while looking for more evidence. Communicate with Bleu using clear reasoning, reliable facts, and time to examine the details.

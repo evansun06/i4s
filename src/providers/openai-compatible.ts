@@ -31,6 +31,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       `${baseUrl.replace(/\/$/, '')}/chat/completions`,
       {
         method: 'POST',
+        ...(request.signal && { signal: request.signal }),
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${apiKey}`,

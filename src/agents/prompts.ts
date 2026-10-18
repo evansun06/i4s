@@ -1,4 +1,5 @@
 import type { LogEvent } from '../core/types.js';
+import { resolveAgent } from './identity.js';
 
 export type ReplyAction =
   'pass' | 'speak' | 'keep' | 'withdraw' | 'revise' | 'deep';
@@ -203,7 +204,8 @@ export function findMentions<Id extends string>(
 ): Id[] {
   const found: Id[] = [];
   for (const [, name = ''] of text.matchAll(/@(\w+)/g)) {
-    const id = ids.find((candidate) => candidate === name.toLowerCase());
+    const resolved = resolveAgent(name) ?? name.toLowerCase();
+    const id = ids.find((candidate) => candidate === resolved);
     if (id && !found.includes(id)) found.push(id);
   }
   return found;

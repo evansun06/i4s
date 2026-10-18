@@ -11,19 +11,24 @@ import {
   saveSettings,
 } from '../storage/credentials.js';
 import { listSessions, type Session } from '../storage/sessions.js';
+import { promptTheme, ansiColor, theme, visibleText } from './theme.js';
 
 const RECENT_SESSIONS = 15;
+const choiceText = (text: string) => ansiColor(visibleText(text), theme.text);
 
 /** Offers recent discussions to continue; undefined means start a new one. */
 export async function chooseSession(): Promise<Session | undefined> {
   const sessions = (await listSessions()).slice(0, RECENT_SESSIONS);
   if (!sessions.length) return undefined;
   const choice = await select<string>({
+    theme: promptTheme,
     message: 'Start a new discussion or continue one?',
     choices: [
-      { name: 'New discussion', value: '' },
+      { name: choiceText('New discussion'), value: '' },
       ...sessions.map((session) => ({
-        name: `${session.title}  (${when(session.updatedAt)}, ${session.discussion.log.length} messages)`,
+        name: choiceText(
+          `${session.title}  (${when(session.updatedAt)}, ${session.discussion.log.length} messages)`,
+        ),
         value: session.id,
       })),
     ],
@@ -78,13 +83,17 @@ export async function chooseProvider(
       );
     const choice = found.length
       ? await select<ProviderId | 'add'>({
+          theme: promptTheme,
           message: 'Which provider should the panel use?',
           choices: [
             ...found.map((key) => ({
-              name: describe(key),
+              name: choiceText(describe(key)),
               value: key.provider,
             })),
-            { name: 'Add or change an API key', value: 'add' as const },
+            {
+              name: choiceText('Add or change an API key'),
+              value: 'add' as const,
+            },
           ],
         })
       : 'add';
@@ -113,6 +122,7 @@ async function addKey(provider?: ProviderId): Promise<ChosenProvider> {
   while (!apiKey) {
     apiKey = (
       await password({
+        theme: promptTheme,
         message: provider
           ? `Enter your ${presets[provider].label} API key:`
           : 'Paste an API key (Gemini, ChatGPT/OpenAI, Claude, or OpenRouter):',
@@ -124,15 +134,19 @@ async function addKey(provider?: ProviderId): Promise<ChosenProvider> {
     provider ??
     detectProvider(apiKey) ??
     (await select<ProviderId>({
+      theme: promptTheme,
       message: 'Which provider is this key for?',
       choices: MENU_PROVIDERS.map((id) => ({
-        name: presets[id].label,
+        name: choiceText(presets[id].label),
         value: id,
       })),
     }));
   await keychain.set(resolved, apiKey);
   process.stdout.write(
-    `${presets[resolved].label} key saved to your system keychain.\n`,
+    ansiColor(
+      `${presets[resolved].label} key saved to your system keychain.\n`,
+      theme.text,
+    ),
   );
   return { provider: resolved, apiKey };
 }
