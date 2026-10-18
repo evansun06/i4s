@@ -8,7 +8,7 @@ import {
 } from './providers/presets.js';
 import type { ModelProvider } from './providers/model.js';
 
-const HELP = `The Idiots — four perspectives, one discussion.
+const HELP = `The Idiots — four perspectives.
 
 Usage: i4s [options]
 
