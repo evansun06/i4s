@@ -16,7 +16,9 @@ const provider = {
         ?.name ?? 'Ruby';
     const text =
       request.kind === 'review'
-        ? 'REVISE\nLet’s try one small batch first.'
+        ? request.prompt.includes('Ruby:') && agent === 'Lemon'
+          ? 'WITHDRAW'
+          : 'KEEP'
         : request.prompt.includes('ask me') &&
             !request.prompt.includes('(asked the user;')
           ? 'SPEAK\nQUESTION: What would make this demo successful for you?'

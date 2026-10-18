@@ -4,11 +4,11 @@ The room has one mode at a time. Each of the four agents has its own activity st
 
 ## Implemented exchange scheduling
 
-Both Ink and plain transcript clients use the same local orchestrator. A user submission starts concurrent drafts, with at most one active contribution per character. One character speaks at a time. A hidden `SPEAK TO <name>` header (or a direct address in the text) requests a follow-up; the addressed character takes priority over unrelated queued drafts. A held draft reviews the new context instead of starting a duplicate reply. Prompts and transcripts identify Ruby (Red), Lemon (Yellow), Jade (Green), and Bleu (Blue), and each character knows the team roster. Persisted IDs remain colors for compatibility.
+Both Ink and plain transcript clients use the same local orchestrator. A user submission starts concurrent drafts, with at most one active contribution per character. One character speaks at a time. A hidden `SPEAK TO <name>` header (or a direct address in the text) requests a follow-up; the addressed character takes priority over unrelated queued drafts. After every completed agent message (including thinking announcements), all queued contributions review new context concurrently. KEEP retains a contribution, REVISE updates it in place, and WITHDRAW removes it from the visible queue. The next speaking turn waits until every queued contribution is current. Late drafts review what they missed when ready; unfinished drafts do not block the queue. Reviews share the hard call budget and retain one active model call per agent. Prompts and transcripts identify Ruby (Red), Lemon (Yellow), Jade (Green), and Bleu (Blue), and each character knows the team roster. Persisted IDs remain colors for compatibility.
 
 An exchange yields after six public messages, when everyone passes, when the user submits input, or when a blocking question is delivered. Thinking announcements count toward the six messages. Held work resumes on the next submission and is reviewed before speaking. This is a conversational checkpoint, not a proposal-selection gate. All model calls, including reviews and summaries, remain subject to the hard call budget. Paused and awaiting-user rooms start no new calls or turns.
 
-Playback gates both live streams and held replies. Ink queues user messages and raises a hand on submission; paused input stays queued until resume. The restored question prompts ask for `QUESTION:` when the answer would change the advice and discourage consecutive questions. The engine uses that marker to create a pending question; both clients hide the marker during streaming and when replaying saved messages. The footer identifies who is waiting without repeating the question.
+Playback gates both live streams and held replies. Ink queues user messages and raises a hand on submission. Ctrl+R also reserves the next turn without submitting or clearing the editor; the current displayed message finishes, then the user has the floor. Raising a hand takes precedence over outstanding reviews. Paused input stays queued until resume; Ctrl+R does not resume a paused room. Plain mode retains Enter to raise a hand. The restored question prompts ask for `QUESTION:` when the answer would change the advice and discourage consecutive questions. The engine uses that marker to create a pending question; both clients hide the marker during streaming and when replaying saved messages. The footer identifies who is waiting without repeating the question.
 
 The diagrams and proposal/brief machinery below record the earlier continuous-room design. They are future exploration where they differ from this bounded group-chat implementation; mandatory brief consensus and autonomous continuation are not prerequisites for chatting.
 
@@ -70,9 +70,10 @@ stateDiagram-v2
     Listening --> Thinking: New message or own turn
     Thinking --> Listening: Pass
     Thinking --> Waiting: Queue intention, conversation point or user question
-    Waiting --> Reviewing: Next in queue and floor is free
+    Waiting --> Reviewing: New agent message or user input
     Waiting --> Reviewing: User grants next turn
-    Reviewing --> Speaking: Point or question still relevant, revise if needed
+    Reviewing --> Waiting: Keep or revise contribution
+    Waiting --> Speaking: All queued reviews current and floor available
     Reviewing --> Listening: Withdraw, point covered or question answered
     Speaking --> Listening: Conversation point finished, discussion continues
     Speaking --> Listening: User question finished, room enters AwaitingUser

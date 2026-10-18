@@ -503,13 +503,52 @@ test('input during paused playback wins the next turn after resume', async () =>
       1,
     );
     await until(() =>
-      calls.some((call) => call.agent === 'blue' && call.kind === 'review'),
+      calls.some(
+        (call) =>
+          call.agent === 'blue' &&
+          call.kind === 'review' &&
+          call.prompt.includes('change topic'),
+      ),
     );
     assert.match(
-      calls.find((call) => call.agent === 'blue' && call.kind === 'review')
+      calls.findLast((call) => call.agent === 'blue' && call.kind === 'review')
         .prompt,
       /change topic/,
     );
+  } finally {
+    await controller.close();
+  }
+});
+
+test('explicit hand raising reserves the floor without submitting a message or starting calls', async () => {
+  const { engine, controller, calls } = fixture(
+    (request) =>
+      request.kind === 'review' ? 'KEEP' : 'SPEAK\nA point worth reading.',
+    { wpm: 6000 },
+  );
+  try {
+    assert.equal(controller.raiseHand(), false);
+    controller.accept('Hello');
+    await until(() => controller.snapshot().displaying === 'red');
+    const before = calls.length;
+    assert.equal(controller.raiseHand(), true);
+    assert.equal(controller.raiseHand(), false);
+    await until(
+      () =>
+        engine.snapshot().mode === 'awaiting-user' &&
+        !controller.snapshot().displaying,
+    );
+    assert.equal(calls.length, before);
+    assert.equal(userMessages(engine).length, 1);
+    assert.equal(controller.snapshot().queued.length, 0);
+    assert.equal(
+      engine.bus.log.filter((event) => event.kind === 'agent-message').length,
+      1,
+    );
+    assert.ok(engine.snapshot().queue.length > 0);
+    controller.accept('@bleu new direction');
+    await until(() => userMessages(engine).length === 2);
+    assert.equal(engine.snapshot().handRaised, false);
   } finally {
     await controller.close();
   }

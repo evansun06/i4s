@@ -203,6 +203,11 @@ export class ChatController {
     this.#changed();
   }
 
+  /** Reserve the next turn without submitting or changing the editor. */
+  raiseHand(): boolean {
+    return !this.#closing && this.engine.raiseHand();
+  }
+
   /** Returns true only for /quit; the caller owns terminal teardown. */
   accept(input: string): boolean {
     if (this.#closing || !input.trim()) return false;
