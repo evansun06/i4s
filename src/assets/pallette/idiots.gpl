@@ -1,0 +1,45 @@
+GIMP Palette
+Name: The Idiots (muted, dark terminal 1E1E1E)
+Columns: 6
+# Background reference: #1E1E1E. Per agent: Panel, Outline, Shadow, Base, Light, Glow. Same lightness steps for every agent.
+ 30  30  30 BG reference
+ 26  20  32 Ink (eyes, mouth)
+230 226 216 White (glints)
+224 224 224 UI bright
+189 189 189 UI text
+122 122 122 UI dim
+ 68  68  68 UI border
+ 42  42  42 UI panel
+201 133 120 Blush
+227 196 168 Skin light
+199 159 127 Skin light shade
+212 165 130 Skin warm
+184 130  96 Skin warm shade
+178 127  88 Skin tan
+146  97  65 Skin tan shade
+125  79  53 Skin deep
+ 94  56  34 Skin deep shade
+ 56  36  34 Red Panel
+120  60  54 Red Outline
+145  82  75 Red Shadow
+173 108 100 Red Base
+198 142 135 Red Light
+221 187 182 Red Glow
+ 48  41  25 Yellow Panel
+ 99  76   6 Yellow Outline
+122  99  37 Yellow Shadow
+149 125  65 Yellow Base
+177 156 108 Yellow Light
+207 195 167 Yellow Glow
+ 33  46  33 Green Panel
+ 47  92  49 Green Outline
+ 69 115  71 Green Shadow
+ 95 142  96 Green Base
+131 170 132 Green Light
+181 203 181 Green Glow
+ 32  43  57 Blue Panel
+ 46  81 125 Blue Outline
+ 67 104 150 Blue Shadow
+ 93 130 178 Blue Base
+129 161 202 Blue Light
+179 198 222 Blue Glow
