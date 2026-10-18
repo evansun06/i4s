@@ -618,6 +618,12 @@ export class Orchestrator {
           heardUpTo = this.bus.log.length;
         }
         await this.#waitForDisplay();
+        // Review and display waits may outlast a pause. Keep the floor and
+        // reviewed text, but start no speaking turn until the room resumes.
+        while (this.#mode !== 'running' || this.#pendingQuestion) {
+          await this.#waitRunning();
+        }
+        this.#shutdown.signal.throwIfAborted();
         if (this.#handRaised) held = true;
         else this.#commit(agent.id, text, to);
       } finally {
@@ -678,6 +684,10 @@ export class Orchestrator {
       let held = false;
       try {
         await this.#waitForDisplay();
+        while (this.#mode !== 'running' || this.#pendingQuestion) {
+          await this.#waitRunning();
+        }
+        this.#shutdown.signal.throwIfAborted();
         if (this.#handRaised) held = true;
         else {
           this.#announce(
@@ -787,6 +797,16 @@ export class Orchestrator {
    * is always kept word for word.
    */
   async #compact(): Promise<void> {
+    // Maintenance must not hold a round open while the user needs the floor.
+    // Leave older messages intact and try again at a later round boundary.
+    if (
+      this.#disposed ||
+      this.#mode !== 'running' ||
+      this.#pendingQuestion ||
+      this.#handRaised
+    ) {
+      return;
+    }
     const log = this.bus.log;
     if (estimateTokens(log.slice(this.#foldedUpTo)) < this.#compactAtTokens) {
       return;
@@ -799,7 +819,6 @@ export class Orchestrator {
     }
     if (cut === this.#foldedUpTo) return;
 
-    await this.#waitRunning();
     this.#notice = 'Condensing earlier rounds';
     this.#changed();
     let summary = '';

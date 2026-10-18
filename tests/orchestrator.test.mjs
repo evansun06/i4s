@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { setImmediate as settle } from 'node:timers/promises';
 import { panel } from '../dist/agents/panel.js';
 import { Orchestrator } from '../dist/core/orchestrator.js';
 import { RateLimitError } from '../dist/providers/model.js';
@@ -39,6 +40,144 @@ const said = (orchestrator) =>
     .map((e) => `${e.agent}: ${e.text}`);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const staggered = { red: 1, yellow: 5, green: 10, blue: 15 };
+
+for (const result of ['KEEP', 'REVISE\nUpdated recommendation.', 'dispose']) {
+  test(`pause holds a completed review until resume (${result})`, async (t) => {
+    const firstSpoke = Promise.withResolvers();
+    const reviewing = Promise.withResolvers();
+    const reviewed = Promise.withResolvers();
+    const { orchestrator, provider } = room(async (kind, agent) => {
+      if (kind === 'review') {
+        reviewing.resolve();
+        return reviewed.promise;
+      }
+      if (agent === 'red') return 'SPEAK\nFirst recommendation.';
+      await firstSpoke.promise;
+      return 'SPEAK\nSecond recommendation.';
+    });
+    t.after(() => orchestrator.dispose());
+    orchestrator.bus.subscribe((event) => {
+      if (event.kind === 'agent-message') firstSpoke.resolve();
+    });
+    const speakers = [];
+    orchestrator.subscribeAgents((id, state) => {
+      if (state.activity === 'speaking') speakers.push(id);
+    });
+    const cycle = orchestrator.submit('@red @blue plan');
+    await reviewing.promise;
+    orchestrator.pause();
+    const calls = provider.calls.length;
+    reviewed.resolve(result === 'dispose' ? 'KEEP' : result);
+    await settle();
+    assert.equal(orchestrator.snapshot().mode, 'paused');
+    assert.deepEqual(speakers, ['red']);
+    assert.deepEqual(said(orchestrator), ['red: First recommendation.']);
+    assert.equal(provider.calls.length, calls);
+
+    if (result === 'dispose') orchestrator.dispose();
+    else assert.equal(orchestrator.resume(), true);
+    await cycle;
+    assert.equal(provider.calls.length, calls);
+    assert.deepEqual(said(orchestrator), [
+      'red: First recommendation.',
+      ...(result === 'dispose'
+        ? []
+        : [
+            `blue: ${result === 'KEEP' ? 'Second recommendation.' : 'Updated recommendation.'}`,
+          ]),
+    ]);
+  });
+}
+
+for (const deep of [false, true]) {
+  test(`pause during display wait holds ${deep ? 'deep announcement' : 'reply'}`, async (t) => {
+    const firstSpoke = Promise.withResolvers();
+    const waiting = Promise.withResolvers();
+    const display = Promise.withResolvers();
+    const { orchestrator, provider } = room(async (kind, agent) => {
+      if (kind === 'review') return 'KEEP';
+      if (agent === 'red') return 'SPEAK\nFirst recommendation.';
+      await firstSpoke.promise;
+      return 'SPEAK\nConsidered recommendation.';
+    });
+    t.after(() => orchestrator.dispose());
+    orchestrator.bus.subscribe((event) => {
+      if (event.kind === 'agent-message') firstSpoke.resolve();
+    });
+    orchestrator.setDisplayGate(() => {
+      waiting.resolve();
+      return display.promise;
+    });
+    const cycle = orchestrator.submit('@red @blue plan', {
+      ...(deep && { deep: ['blue'] }),
+    });
+    await waiting.promise;
+    orchestrator.pause();
+    const before = [...orchestrator.bus.log];
+    const calls = provider.calls.length;
+    display.resolve();
+    await settle();
+    assert.deepEqual(orchestrator.bus.log, before);
+    assert.equal(orchestrator.snapshot().speaking, undefined);
+    assert.equal(provider.calls.length, calls);
+    assert.equal(orchestrator.resume(), true);
+    await cycle;
+    assert.equal(orchestrator.snapshot().mode, 'awaiting-user');
+    const blue = orchestrator.bus.log.filter((event) => event.agent === 'blue');
+    assert.equal(blue.length, deep ? 2 : 1);
+    assert.equal(blue.at(-1).text, 'Considered recommendation.');
+    assert.equal(
+      provider.calls.filter((call) => call.effort === 'high').length,
+      deep ? 1 : 0,
+    );
+  });
+}
+
+for (const answer of [true, false]) {
+  test(`question defers compaction until ${answer ? 'answered' : 'set aside'}`, async (t) => {
+    let drafts = 0;
+    const provider = fakeProvider((kind) => {
+      if (kind === 'summary') return 'Earlier discussion summary.';
+      return ++drafts === 2
+        ? 'SPEAK\nQUESTION: What is your budget?'
+        : 'SPEAK\nA recommendation.';
+    });
+    const orchestrator = new Orchestrator({
+      agents: panel,
+      provider,
+      callLimit: 20,
+      compactAtTokens: 1,
+      keepTokens: 1,
+    });
+    t.after(() => orchestrator.dispose());
+    await orchestrator.submit('@red start');
+    const cycle = orchestrator.submit('@red clarify');
+    assert.equal(
+      await Promise.race([cycle.then(() => 'done'), delay(1000)]),
+      'done',
+    );
+    const question = orchestrator.snapshot().pendingQuestion;
+    assert.equal(orchestrator.snapshot().mode, 'awaiting-user');
+    assert.equal(question.question, 'What is your budget?');
+    assert.equal(orchestrator.save().foldedUpTo, 0);
+    assert.equal(
+      provider.calls.some((call) => call.kind === 'summary'),
+      false,
+    );
+    await orchestrator.submit('@red $100', { answer });
+    const response = orchestrator.bus.log.findLast(
+      (event) => event.kind === 'user-message',
+    );
+    assert.equal(response.replyTo, answer ? question.eventId : undefined);
+    assert.equal(orchestrator.snapshot().pendingQuestion, undefined);
+    assert.equal(
+      provider.calls.filter((call) => call.kind === 'summary').length,
+      1,
+    );
+    assert.ok(orchestrator.save().foldedUpTo > 0);
+    assert.equal(orchestrator.bus.log.length, 6);
+  });
+}
 
 test('everyone drafts at once; the first speaks live, the rest review', async () => {
   const { provider, orchestrator } = room(async (kind, agent) => {

@@ -51,6 +51,43 @@ function fixture(script, options = {}) {
 const userMessages = (engine) =>
   engine.bus.log.filter((event) => event.kind === 'user-message');
 
+test('a question at the compaction threshold accepts its answer through the input queue', async () => {
+  let drafts = 0;
+  const { controller, engine, calls } = fixture(
+    (request) => {
+      if (request.kind === 'summary') return 'Earlier discussion summary.';
+      return ++drafts === 2
+        ? 'SPEAK\nQUESTION: What is the budget?'
+        : 'SPEAK\nA recommendation.';
+    },
+    { compactAtTokens: 1, keepTokens: 1 },
+  );
+  try {
+    controller.accept('@ruby start');
+    await until(() => engine.snapshot().mode === 'awaiting-user');
+    controller.accept('@ruby clarify');
+    await until(() => controller.snapshot().question);
+    const questionId = controller.snapshot().question.eventId;
+    assert.equal(engine.snapshot().mode, 'awaiting-user');
+    assert.equal(
+      calls.some((call) => call.kind === 'summary'),
+      false,
+    );
+    controller.accept('@ruby $100');
+    await until(
+      () =>
+        userMessages(engine).length === 3 &&
+        engine.snapshot().mode === 'awaiting-user',
+    );
+    assert.equal(userMessages(engine)[2].replyTo, questionId);
+    assert.equal(controller.snapshot().question, undefined);
+    assert.equal(controller.snapshot().queued.length, 0);
+    assert.equal(calls.filter((call) => call.kind === 'summary').length, 1);
+  } finally {
+    await controller.close();
+  }
+});
+
 test('command completion replaces only the current token, supports names, and rejects invalid commands', () => {
   assert.equal(complete('/pa')[0].value, '/pause ');
   assert.equal(complete('@bl')[0].value, '@bleu ');
