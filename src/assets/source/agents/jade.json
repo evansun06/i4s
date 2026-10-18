@@ -1,92 +1,211 @@
 {
   "frames": [
     {
-      "filename": "jade #Idle 0.aseprite",
-      "frame": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
+      "filename": "jade #pallette.aseprite",
+      "frame": { "x": 0, "y": 0, "w": 16, "h": 16 },
       "rotated": false,
       "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #Idle 0.aseprite",
+      "frame": { "x": 16, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
       "duration": 500
     },
     {
       "filename": "jade #Idle 1.aseprite",
-      "frame": {
-        "x": 16,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
+      "frame": { "x": 32, "y": 0, "w": 16, "h": 16 },
       "rotated": false,
       "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
       "duration": 500
     },
     {
       "filename": "jade #Idle 2.aseprite",
-      "frame": {
-        "x": 32,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
+      "frame": { "x": 48, "y": 0, "w": 16, "h": 16 },
       "rotated": false,
       "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
       "duration": 500
     },
     {
       "filename": "jade #Idle 3.aseprite",
-      "frame": {
-        "x": 48,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
+      "frame": { "x": 64, "y": 0, "w": 16, "h": 16 },
       "rotated": false,
       "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
       "duration": 500
+    },
+    {
+      "filename": "jade #toSpeak 0.aseprite",
+      "frame": { "x": 80, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 1.aseprite",
+      "frame": { "x": 96, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 2.aseprite",
+      "frame": { "x": 112, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 3.aseprite",
+      "frame": { "x": 128, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 4.aseprite",
+      "frame": { "x": 144, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 5.aseprite",
+      "frame": { "x": 160, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 6.aseprite",
+      "frame": { "x": 176, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 7.aseprite",
+      "frame": { "x": 192, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toSpeak 8.aseprite",
+      "frame": { "x": 208, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 1000
+    },
+    {
+      "filename": "jade #toNotSpeak 0.aseprite",
+      "frame": { "x": 224, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 1.aseprite",
+      "frame": { "x": 240, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 2.aseprite",
+      "frame": { "x": 256, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 3.aseprite",
+      "frame": { "x": 272, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 4.aseprite",
+      "frame": { "x": 288, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 5.aseprite",
+      "frame": { "x": 304, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 6.aseprite",
+      "frame": { "x": 320, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 7.aseprite",
+      "frame": { "x": 336, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
+    },
+    {
+      "filename": "jade #toNotSpeak 8.aseprite",
+      "frame": { "x": 352, "y": 0, "w": 16, "h": 16 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 16, "h": 16 },
+      "sourceSize": { "w": 16, "h": 16 },
+      "duration": 100
     }
   ],
   "meta": {
@@ -94,25 +213,42 @@
     "version": "1.3.18.6-arm64",
     "image": "jade.png",
     "format": "RGBA8888",
-    "size": {
-      "w": 64,
-      "h": 16
-    },
+    "size": { "w": 368, "h": 16 },
     "scale": "1",
     "frameTags": [
       {
-        "name": "idle",
+        "name": "pallette",
         "from": 0,
-        "to": 3,
-        "direction": "forward"
+        "to": 0,
+        "direction": "forward",
+        "color": "#000000ff"
+      },
+      {
+        "name": "Idle",
+        "from": 1,
+        "to": 4,
+        "direction": "forward",
+        "color": "#000000ff"
+      },
+      {
+        "name": "toSpeak",
+        "from": 5,
+        "to": 13,
+        "direction": "forward",
+        "repeat": "1",
+        "color": "#000000ff"
+      },
+      {
+        "name": "toNotSpeak",
+        "from": 14,
+        "to": 22,
+        "direction": "forward",
+        "color": "#000000ff"
       }
     ],
     "layers": [
-      {
-        "name": "Avatar",
-        "opacity": 255,
-        "blendMode": "normal"
-      }
+      { "name": "Avatar", "opacity": 255, "blendMode": "normal" },
+      { "name": "Podium", "opacity": 255, "blendMode": "normal" }
     ],
     "slices": []
   }

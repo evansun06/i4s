@@ -63,6 +63,20 @@ export const theme = {
   >,
 };
 
+/** Dim both halves of an avatar pixel consistently, including backgrounds. */
+export function dimAvatarColor(hex: string): string {
+  // Keep 30% of the avatar's contrast against the terminal background.
+  return `#${[1, 3, 5]
+    .map((at) => {
+      const background = parseInt(theme.background.slice(at, at + 2), 16);
+      const channel = parseInt(hex.slice(at, at + 2), 16);
+      return Math.round(background + (channel - background) * 0.3)
+        .toString(16)
+        .padStart(2, '0');
+    })
+    .join('')}`;
+}
+
 /** Strip terminal controls from user/model text before rendering it. */
 export function visibleText(text: string): string {
   return Array.from(stripVTControlCharacters(text))

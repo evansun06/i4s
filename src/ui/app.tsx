@@ -22,8 +22,8 @@ import type { AgentId } from '../core/types.js';
 import { complete } from './commands.js';
 import type { ChatController, PresentationSnapshot } from './controller.js';
 import { edit, editorWindow, type EditorState } from './editor.js';
-import { IdleAnimation, type SpriteFrame } from './sprites.js';
-import { theme, visibleText } from './theme.js';
+import { FloorAnimation, type SpriteAnimations } from './sprites.js';
+import { dimAvatarColor, theme, visibleText } from './theme.js';
 
 export function activityLabel(
   state: PresentationSnapshot,
@@ -50,6 +50,10 @@ export function roomLabel(state: PresentationSnapshot): string {
   return state.room.mode === 'running' ? 'Thinking' : 'Your turn';
 }
 
+export function floorAgent(state: PresentationSnapshot): AgentId | undefined {
+  return state.displaying ?? state.question?.agent;
+}
+
 export function CharacterRow({
   state,
   sprites,
@@ -57,23 +61,18 @@ export function CharacterRow({
   tick,
 }: {
   state: PresentationSnapshot;
-  sprites: Record<AgentId, readonly SpriteFrame[]>;
+  sprites: Record<AgentId, SpriteAnimations>;
   compact: boolean;
   tick: number;
 }) {
   const reducedMotion =
     useIsScreenReaderEnabled() || process.env.NO_COLOR !== undefined;
+  const speaker = floorAgent(state);
   const clocks = useMemo(
     () =>
       Object.fromEntries(
-        agentIds.map((id) => [
-          id,
-          new IdleAnimation(
-            sprites[id].map((frame) => frame.duration),
-            Date.now(),
-          ),
-        ]),
-      ) as Record<AgentId, IdleAnimation>,
+        agentIds.map((id) => [id, new FloorAnimation(sprites[id], Date.now())]),
+      ) as Record<AgentId, FloorAnimation>,
     [sprites],
   );
   return (
@@ -85,8 +84,9 @@ export function CharacterRow({
       flexWrap={compact ? 'wrap' : 'nowrap'}
     >
       {agentIds.map((id) => {
-        const frame = sprites[id][reducedMotion ? 0 : clocks[id].frame(tick)]!;
+        const frame = clocks[id].frame(tick, speaker === id, reducedMotion);
         const colors = theme.agents[id];
+        const dimmed = speaker !== undefined && speaker !== id;
         return (
           <Box
             key={id}
@@ -101,8 +101,18 @@ export function CharacterRow({
                     {row.map((cell, x) => (
                       <Text
                         key={x}
-                        color={cell.foreground ?? theme.text}
-                        backgroundColor={cell.background ?? theme.background}
+                        color={
+                          dimmed
+                            ? dimAvatarColor(cell.foreground ?? theme.text)
+                            : (cell.foreground ?? theme.text)
+                        }
+                        backgroundColor={
+                          dimmed
+                            ? dimAvatarColor(
+                                cell.background ?? theme.background,
+                              )
+                            : (cell.background ?? theme.background)
+                        }
                       >
                         {cell.glyph}
                       </Text>
@@ -130,7 +140,7 @@ export function App({
   providerLabel,
 }: {
   controller: ChatController;
-  sprites: Record<AgentId, readonly SpriteFrame[]>;
+  sprites: Record<AgentId, SpriteAnimations>;
   providerLabel: string;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);

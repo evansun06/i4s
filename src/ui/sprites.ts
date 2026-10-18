@@ -13,6 +13,12 @@ export interface SpriteFrame {
   readonly duration: number;
 }
 
+export interface SpriteAnimations {
+  readonly idle: readonly SpriteFrame[];
+  readonly toSpeak: readonly SpriteFrame[];
+  readonly toNotSpeak: readonly SpriteFrame[];
+}
+
 /** The hand-drawn exports are noninterlaced, 8-bit RGBA PNGs. */
 export function decodePng(png: Buffer): {
   width: number;
@@ -67,7 +73,7 @@ export function decodePng(png: Buffer): {
   return { width, height, pixels };
 }
 
-export function loadSprites(): Record<AgentId, readonly SpriteFrame[]> {
+export function loadSprites(): Record<AgentId, SpriteAnimations> {
   return Object.fromEntries(
     agentIds.map((id) => {
       const base = new URL(
@@ -84,57 +90,74 @@ export function loadSprites(): Record<AgentId, readonly SpriteFrame[]> {
         }[];
         meta: { frameTags: { name: string; from: number; to: number }[] };
       };
-      const idle = meta.meta.frameTags.find(
-        (tag) => tag.name.toLowerCase() === 'idle',
-      );
-      if (!idle || idle.from < 0 || idle.to >= meta.frames.length) {
-        throw new Error(`Invalid idle frames for ${id}.`);
-      }
-      const frames = meta.frames
-        .slice(idle.from, idle.to + 1)
-        .map(({ frame, duration }) => {
-          if (
-            frame.x < 0 ||
-            frame.y < 0 ||
-            frame.w !== 16 ||
-            frame.h !== 16 ||
-            frame.x + frame.w > sheet.width ||
-            frame.y + frame.h > sheet.height ||
-            duration <= 0
-          ) {
-            throw new Error(`Invalid sprite bounds for ${id}.`);
-          }
-          const pixel = (x: number, y: number) => {
-            const at = ((frame.y + y) * sheet.width + frame.x + x) * 4;
-            return sheet.pixels[at + 3]
-              ? `#${sheet.pixels.subarray(at, at + 3).toString('hex')}`
-              : undefined;
-          };
-          const rows: PixelCell[][] = [];
-          for (let y = 0; y < frame.h; y += 2) {
-            const row: PixelCell[] = [];
-            for (let x = 0; x < frame.w; x++) {
-              const top = pixel(x, y),
-                bottom = pixel(x, y + 1);
-              row.push(
-                top
-                  ? {
-                      glyph: '▀',
-                      foreground: top,
-                      ...(bottom && { background: bottom }),
-                    }
-                  : bottom
-                    ? { glyph: '▄', foreground: bottom }
-                    : { glyph: ' ' },
-              );
+      const sequence = (name: string): readonly SpriteFrame[] => {
+        const tag = meta.meta.frameTags.find(
+          (tag) => tag.name.toLowerCase() === name.toLowerCase(),
+        );
+        if (!tag && name !== 'idle') return [];
+        if (
+          !tag ||
+          !Number.isInteger(tag.from) ||
+          !Number.isInteger(tag.to) ||
+          tag.from < 0 ||
+          tag.to < tag.from ||
+          tag.to >= meta.frames.length
+        ) {
+          throw new Error(`Invalid ${name} frames for ${id}.`);
+        }
+        return meta.frames
+          .slice(tag.from, tag.to + 1)
+          .map(({ frame, duration }) => {
+            if (
+              frame.x < 0 ||
+              frame.y < 0 ||
+              frame.w !== 16 ||
+              frame.h !== 16 ||
+              frame.x + frame.w > sheet.width ||
+              frame.y + frame.h > sheet.height ||
+              duration <= 0
+            ) {
+              throw new Error(`Invalid sprite bounds for ${id}.`);
             }
-            rows.push(row);
-          }
-          return { rows, duration };
-        });
-      return [id, frames];
+            const pixel = (x: number, y: number) => {
+              const at = ((frame.y + y) * sheet.width + frame.x + x) * 4;
+              return sheet.pixels[at + 3]
+                ? `#${sheet.pixels.subarray(at, at + 3).toString('hex')}`
+                : undefined;
+            };
+            const rows: PixelCell[][] = [];
+            for (let y = 0; y < frame.h; y += 2) {
+              const row: PixelCell[] = [];
+              for (let x = 0; x < frame.w; x++) {
+                const top = pixel(x, y),
+                  bottom = pixel(x, y + 1);
+                row.push(
+                  top
+                    ? {
+                        glyph: '▀',
+                        foreground: top,
+                        ...(bottom && { background: bottom }),
+                      }
+                    : bottom
+                      ? { glyph: '▄', foreground: bottom }
+                      : { glyph: ' ' },
+                );
+              }
+              rows.push(row);
+            }
+            return { rows, duration };
+          });
+      };
+      return [
+        id,
+        {
+          idle: sequence('idle'),
+          toSpeak: sequence('toSpeak'),
+          toNotSpeak: sequence('toNotSpeak'),
+        },
+      ];
     }),
-  ) as unknown as Record<AgentId, readonly SpriteFrame[]>;
+  ) as unknown as Record<AgentId, SpriteAnimations>;
 }
 
 /** Independent local clocks: one idle cycle, then a randomly timed rest. */
@@ -161,5 +184,58 @@ export class IdleAnimation {
     this.#started = undefined;
     this.#next = now + 3000 + this.random() * 5000;
     return 0;
+  }
+}
+
+/** Each character owns its transitions, so entrances and exits can overlap. */
+export class FloorAnimation {
+  #active = false;
+  #started: number;
+  #transition: 'toSpeak' | 'toNotSpeak' | undefined;
+  #idle: IdleAnimation;
+
+  constructor(
+    private readonly sprites: SpriteAnimations,
+    now: number,
+    private readonly random = Math.random,
+  ) {
+    this.#started = now;
+    this.#idle = this.#newIdle(now);
+  }
+
+  #newIdle(now: number): IdleAnimation {
+    return new IdleAnimation(
+      this.sprites.idle.map((frame) => frame.duration),
+      now,
+      this.random,
+    );
+  }
+
+  frame(now: number, active: boolean, reducedMotion = false): SpriteFrame {
+    if (active !== this.#active) {
+      this.#active = active;
+      this.#started = now;
+      this.#transition = active ? 'toSpeak' : 'toNotSpeak';
+    }
+    if (reducedMotion) {
+      this.#transition = undefined;
+      return (
+        (active ? this.sprites.toSpeak.at(-1) : undefined) ??
+        this.sprites.idle[0]!
+      );
+    }
+    if (this.#transition) {
+      const frames = this.sprites[this.#transition];
+      let elapsed = now - this.#started;
+      for (const frame of frames) {
+        if (elapsed < frame.duration) return frame;
+        elapsed -= frame.duration;
+      }
+      if (!active) this.#idle = this.#newIdle(now);
+      this.#transition = undefined;
+    }
+    if (active && this.sprites.toSpeak.length)
+      return this.sprites.toSpeak.at(-1)!;
+    return this.sprites.idle[this.#idle.frame(now)]!;
   }
 }
