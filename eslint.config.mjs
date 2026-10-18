@@ -6,7 +6,9 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**'] },
+  {
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', '.idle-preview/**'],
+  },
   {
     files: ['**/*.{ts,tsx,mjs}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],

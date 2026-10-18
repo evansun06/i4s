@@ -17,7 +17,7 @@
   "scripts": {
     "dev": "tsx src/cli.tsx",
     "dev:watch": "tsx watch --clear-screen=false src/cli.tsx",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
@@ -35,7 +35,8 @@
     "@inquirer/select": "^5.2.6",
     "ink": "^7.0.6",
     "keytar": "^7.9.0",
-    "react": "^19.2.4"
+    "react": "^19.2.4",
+    "string-width": "^8.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

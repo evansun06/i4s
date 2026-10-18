@@ -12,6 +12,7 @@ import {
   transcript,
   type DiscussionContext,
 } from '../agents/prompts.js';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   RateLimitError,
   type ModelProvider,
@@ -94,7 +95,8 @@ export class Orchestrator {
   readonly #agentStates = new Map<AgentId, AgentState>();
   readonly #agentListeners = new Set<AgentListener>();
   readonly #lastSpoke = new Map<AgentId, number>();
-  readonly #resumeWaiters: (() => void)[] = [];
+  readonly #shutdown = new AbortController();
+  #disposed = false;
   /** Agents with a contribution in progress; they can span rounds. */
   readonly #active = new Set<AgentId>();
   readonly #floorQueue: {
@@ -255,6 +257,7 @@ export class Orchestrator {
       readonly deep?: readonly AgentId[];
     } = {},
   ): Promise<void> {
+    this.#shutdown.signal.throwIfAborted();
     if (this.#mode !== 'initial-prompt' && this.#mode !== 'awaiting-user') {
       throw new Error('Wait for the agents to finish before replying.');
     }
@@ -308,14 +311,17 @@ export class Orchestrator {
         !this.#active.has(this.#pendingQuestion.agent)) ||
       (this.#handRaised && !this.#floorBusy);
     await this.#until(settled);
+    if (this.#disposed) return;
     // Everyone passed: the user still gets one reply.
     if (!this.#spokeThisRound && !this.#pendingQuestion && !this.#handRaised) {
       this.#start(this.#quietest(), true);
       await this.#until(settled);
+      if (this.#disposed) return;
     }
     if (this.#active.size === 0) await this.#rebuttals();
     // Held drafts point into recent messages, so only condense between them.
     if (this.#active.size === 0) await this.#compact();
+    if (this.#disposed) return;
 
     if (this.#mode === 'paused') this.#resumeTo = 'awaiting-user';
     else this.#setMode('awaiting-user');
@@ -355,7 +361,7 @@ export class Orchestrator {
     exchange: number,
   ): Promise<boolean> {
     this.#setAgent(agent.id, 'thinking');
-    await this.#acquireCall();
+    await this.#waitRunning();
     const challengerName =
       this.#agents.find((other) => other.id === challenger)?.name ?? challenger;
     let raw = '';
@@ -445,11 +451,11 @@ export class Orchestrator {
 
   /** Returns false when the usage limit still blocks progress. */
   resume(): boolean {
+    if (this.#disposed) return false;
     if (this.#mode !== 'paused') return true;
     if (this.#callsUsed >= this.#callLimit) return false;
     this.#notice = undefined;
     this.#setMode(this.#resumeTo);
-    for (const wake of this.#resumeWaiters.splice(0)) wake();
     this.#grantFloor();
     return true;
   }
@@ -472,16 +478,31 @@ export class Orchestrator {
   }
 
   raiseCallLimit(by: number): void {
+    if (
+      !Number.isSafeInteger(by) ||
+      by <= 0 ||
+      !Number.isSafeInteger(this.#callLimit + by)
+    ) {
+      throw new Error('Add a positive whole number of calls.');
+    }
     this.#callLimit += by;
     this.#changed();
   }
 
   #start(agent: AgentDefinition, forced: boolean): void {
+    if (this.#disposed) return;
     this.#active.add(agent.id);
-    void this.#contribute(agent, forced).finally(() => {
-      this.#active.delete(agent.id);
-      this.#changed();
-    });
+    void this.#contribute(agent, forced)
+      .catch((error: unknown) => {
+        if (!this.#disposed) {
+          this.#notice = errorMessage(error);
+          this.#endTurn(agent.id, 'failed');
+        }
+      })
+      .finally(() => {
+        this.#active.delete(agent.id);
+        this.#changed();
+      });
   }
 
   async #contribute(agent: AgentDefinition, forced: boolean): Promise<void> {
@@ -504,7 +525,7 @@ export class Orchestrator {
       return this.#deliberate(agent, forced, MANUAL_ANNOUNCEMENT, true);
     }
     this.#setAgent(agent.id, deep ? 'deliberating' : 'thinking');
-    await this.#acquireCall();
+    await this.#waitRunning();
     const heardUpTo = this.bus.log.length;
     let raw = '';
     let live = false;
@@ -541,6 +562,7 @@ export class Orchestrator {
     }
 
     const draft = parseReply(raw, true);
+    if (this.#disposed) return 'done';
     // Still drafting from before a round that left this agent out.
     if (!this.#takesPart(agent.id)) {
       this.#setAgent(agent.id, 'listening');
@@ -681,6 +703,7 @@ export class Orchestrator {
 
   /** A short message saying the agent is thinking something through. */
   #announce(agent: AgentId, text: string): void {
+    if (this.#disposed) return;
     this.#showSpeech(agent, text);
     const event = this.bus.append({ kind: 'agent-message', agent, text });
     this.#lastSpoke.set(agent, event.id);
@@ -699,7 +722,7 @@ export class Orchestrator {
     heardUpTo: number,
     draftTo: string | undefined,
   ): Promise<{ text: string; to: string | undefined } | undefined> {
-    await this.#acquireCall();
+    await this.#waitRunning();
     this.#setAgent(agent.id, 'reviewing');
     let raw = '';
     try {
@@ -776,7 +799,7 @@ export class Orchestrator {
     }
     if (cut === this.#foldedUpTo) return;
 
-    await this.#acquireCall();
+    await this.#waitRunning();
     this.#notice = 'Condensing earlier rounds';
     this.#changed();
     let summary = '';
@@ -807,6 +830,7 @@ export class Orchestrator {
 
   /** `to`: the agent this reply mainly answers, by id or name, if any. */
   #commit(agent: AgentId, text: string, to?: string): void {
+    if (this.#disposed) return;
     // A kept draft was never streamed, so it is shown whole before committing.
     this.#showSpeech(agent, text);
     const question = findQuestion(text);
@@ -827,12 +851,13 @@ export class Orchestrator {
   }
 
   #showSpeech(agent: AgentId, text: string): void {
+    if (this.#disposed) return;
     this.#speaking = { agent, text };
     this.#setAgent(agent, 'speaking');
   }
 
   #endTurn(agent: AgentId, result: TurnResult): void {
-    this.#speaking = undefined;
+    if (this.#speaking?.agent === agent) this.#speaking = undefined;
     this.#lastTurn = { agent, result };
     const activity: Record<TurnResult, AgentActivity> = {
       spoke: 'listening',
@@ -864,6 +889,7 @@ export class Orchestrator {
    * The user's next message may instead send the draft back or drop it.
    */
   #takeFloor(agent: AgentId): Promise<FloorTurn> {
+    if (this.#disposed) return Promise.resolve('drop');
     return new Promise((wake) => {
       this.#floorQueue.push({ agent, wake });
       this.#changed();
@@ -873,6 +899,7 @@ export class Orchestrator {
 
   #grantFloor(): void {
     if (
+      this.#disposed ||
       this.#floorBusy ||
       this.#mode !== 'running' ||
       this.#pendingQuestion ||
@@ -897,7 +924,27 @@ export class Orchestrator {
     for (let attempt = 1; ; attempt += 1) {
       let started = false;
       try {
-        for await (const chunk of this.#provider.generate(request)) {
+        // Gate and start atomically: another draft exhausting the budget must
+        // not strand a reservation before its provider request even starts.
+        while (true) {
+          if (this.#mode !== 'running' || this.#pendingQuestion) {
+            await this.#waitRunning();
+            continue;
+          }
+          this.#shutdown.signal.throwIfAborted();
+          if (attempt > 1 || this.#callsUsed < this.#callLimit) break;
+          this.#notice = 'Usage limit reached. Raise the limit to continue.';
+          this.pause();
+        }
+        if (attempt === 1) {
+          this.#callsUsed += 1;
+          queueMicrotask(() => this.#changed());
+        }
+        for await (const chunk of this.#provider.generate({
+          ...request,
+          signal: this.#shutdown.signal,
+        })) {
+          this.#shutdown.signal.throwIfAborted();
           started = true;
           yield chunk;
         }
@@ -916,33 +963,34 @@ export class Orchestrator {
         );
         this.#notice = `Rate limited; ${who} retries in ${Math.ceil(seconds)}s.`;
         this.#changed();
-        await new Promise((wake) => setTimeout(wake, seconds * 1000));
+        await delay(seconds * 1000, undefined, {
+          signal: this.#shutdown.signal,
+        });
       }
     }
   }
 
-  /** Blocks while paused; pauses the room instead of exceeding the limit. */
-  async #acquireCall(): Promise<void> {
-    while (true) {
-      while (this.#mode === 'paused') {
-        await new Promise<void>((wake) => this.#resumeWaiters.push(wake));
-      }
-      if (this.#callsUsed < this.#callLimit) {
-        this.#callsUsed += 1;
-        this.#changed();
-        return;
-      }
-      this.#notice = 'Usage limit reached. Raise the limit to continue.';
-      this.pause();
-    }
+  async #waitRunning(): Promise<void> {
+    await this.#until(() => this.#mode === 'running' && !this.#pendingQuestion);
+    this.#shutdown.signal.throwIfAborted();
+  }
+
+  /** Stop calls and release held work; committed messages remain saveable. */
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.#shutdown.abort();
+    for (const waiter of this.#floorQueue.splice(0)) waiter.wake('drop');
+    this.#speaking = undefined;
+    this.#changed();
   }
 
   /** Resolves once `predicate` holds, checked after every change. */
   #until(predicate: () => boolean): Promise<void> {
-    if (predicate()) return Promise.resolve();
+    if (this.#disposed || predicate()) return Promise.resolve();
     return new Promise((resolve) => {
       const check = () => {
-        if (!predicate()) return;
+        if (!this.#disposed && !predicate()) return;
         this.#conditions.delete(check);
         resolve();
       };

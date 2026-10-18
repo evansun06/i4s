@@ -96,10 +96,9 @@ export async function runPlain(
       current?.utterance.finish();
       current = next.speaking && {
         agent: next.speaking.agent,
-        utterance: pacer.speech(
-          `\n${name(next.speaking.agent)}: `,
-          agentName(next.speaking.agent),
-        ),
+        utterance: pacer.speech(`\n${name(next.speaking.agent)}: `, {
+          speaker: agentName(next.speaking.agent),
+        }),
       };
     }
     if (next.speaking) current?.utterance.update(next.speaking.text);

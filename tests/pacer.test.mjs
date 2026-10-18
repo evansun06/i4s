@@ -66,8 +66,8 @@ test('showing names whoever is on screen, not whoever the engine is on', async (
     wordsPerMinute: 600,
     pauseBetweenSpeakersMs: 0,
   });
-  const red = pacer.speech('RED: ', 'RED');
-  const blue = pacer.speech('BLUE: ', 'BLUE');
+  const red = pacer.speech('RED: ', { speaker: 'RED' });
+  const blue = pacer.speech('BLUE: ', { speaker: 'BLUE' });
   red.update('A long enough reply to still be showing.');
   red.finish();
   blue.update('Done already.');

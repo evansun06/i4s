@@ -1,4 +1,5 @@
 export interface ModelRequest {
+  readonly signal?: AbortSignal;
   /** Reviews and summaries can go to a cheaper model than drafts. */
   readonly kind: 'draft' | 'review' | 'summary';
   readonly system: string;

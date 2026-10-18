@@ -2,8 +2,7 @@
 
 ## Project context
 
-The Idiots is a local TypeScript terminal app using React and Ink. Four agents share a discussion; there is no hosted backend. The current implementation is a UI shell, not a working discussion engine.
-
+The Idiots is a local TypeScript terminal app using React and Ink. Four agents share a discussion; there is no hosted backend. The TUI and plain transcript use the same working engine, currently one reply batch per user message. The continuous-room behavior below remains the product direction.
 
 ## Development
 
