@@ -143,6 +143,7 @@ async function main() {
       models,
       maxTokensField: preset.maxTokensField,
       ...(preset.extraBody && { extraBody: preset.extraBody }),
+      ...(preset.highEffort && { highEffort: preset.highEffort }),
     });
   }
 

@@ -1,5 +1,4 @@
 HIGH:
-Add optinos to adjust the agents, like flexibility, agreeabliity, etc. 
 Make agents able to use higher reasoning
 
 LOW:

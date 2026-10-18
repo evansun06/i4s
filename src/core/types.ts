@@ -8,6 +8,8 @@ export type AgentActivity =
   | 'listening'
   /** Drafting a reply to the latest user message. */
   | 'thinking'
+  /** Reasoning at high effort after telling the others it would. */
+  | 'deliberating'
   /** Has a finished draft and is waiting for the floor. */
   | 'waiting'
   /** Holds the floor; checking its draft against what it missed. */

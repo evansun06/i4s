@@ -4,6 +4,8 @@ export interface ModelRequest {
   readonly system: string;
   readonly prompt: string;
   readonly maxOutputTokens: number;
+  /** Ask for the model's deepest reasoning; otherwise the provider default. */
+  readonly effort?: 'high';
 }
 
 /** Thrown before any output when the provider asks us to slow down. */

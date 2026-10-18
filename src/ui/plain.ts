@@ -101,7 +101,7 @@ export async function runPlain(
     const held = agents
       .filter(({ id }) => id !== pendingQuestion.agent)
       .filter(({ id }) =>
-        ['thinking', 'waiting', 'has-question'].includes(
+        ['thinking', 'deliberating', 'waiting', 'has-question'].includes(
           snapshot.agents[id].activity,
         ),
       );
@@ -162,7 +162,14 @@ export async function runPlain(
   }
 
   out.write(
-    '\nWelcome to The Idiots! Type "exit" to quit, or /temp to set how bold the agents are.\n\n',
+    [
+      '',
+      'Welcome to The Idiots! Type "exit" to quit.',
+      `${DIM}  /think blue <message>  ask an agent to think it through (/think <message> for all)`,
+      `  /temp yellow 0.9       set how bold an agent is (/temp to see all)${RESET}`,
+      '',
+      '',
+    ].join('\n'),
   );
   showRecap();
   try {
@@ -185,11 +192,39 @@ export async function runPlain(
 
       // "/new ..." sets a pending question aside and talks to everyone.
       const moveOn = asking !== undefined && /^\/new\b/i.test(input);
-      const text = moveOn ? input.replace(/^\/new\b\s*/i, '') : input;
+      let text = moveOn ? input.replace(/^\/new\b\s*/i, '') : input;
+
+      // "/think blue red <message>" makes those agents reason deeply about
+      // it; "/think <message>" asks all four.
+      let deep: AgentId[] | undefined;
+      const think = /^\/think\b\s*([\s\S]*)$/i.exec(text);
+      if (think) {
+        const words = (think[1] ?? '').split(/\s+/).filter(Boolean);
+        const named: AgentId[] = [];
+        while (words[0]) {
+          const id = agents.find(
+            (agent) => agent.id === words[0]?.toLowerCase(),
+          )?.id;
+          if (id) named.push(id);
+          else if (words[0].toLowerCase() !== 'all') break;
+          words.shift();
+        }
+        deep = named.length ? named : agents.map((agent) => agent.id);
+        text = words.join(' ');
+        if (!text) {
+          out.write(
+            `${DIM}  Use /think blue <message> (or /think <message> for everyone).${RESET}\n\n`,
+          );
+          continue;
+        }
+      }
       if (!text) continue;
 
       pacer.newRound();
-      const round = orchestrator.submit(text, { answer: !moveOn });
+      const round = orchestrator.submit(text, {
+        answer: !moveOn,
+        ...(deep && { deep }),
+      });
       const { mentioned } = orchestrator.snapshot();
       status(
         mentioned.length

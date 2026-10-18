@@ -1,6 +1,7 @@
 import type { LogEvent } from '../core/types.js';
 
-export type ReplyAction = 'pass' | 'speak' | 'keep' | 'withdraw' | 'revise';
+export type ReplyAction =
+  'pass' | 'speak' | 'keep' | 'withdraw' | 'revise' | 'deep';
 
 const LENGTH = `in under 50 words. Go longer (up to 250 words) only if the user's latest message asks you or everyone to expand`;
 const QUESTION_RULE = `Ask the user at most one question, and only if the answer would change your recommendation; otherwise state your assumption and keep going. To ask, end with one line starting "QUESTION:". The discussion stops until the user answers.`;
@@ -96,21 +97,33 @@ export interface DraftOptions {
   readonly addressed: readonly string[];
   /** 0 to 1, see `temperatureGuide`. */
   readonly temperature: number;
+  /** Offer DEEP, asking to reason at high effort before answering. */
+  readonly allowDeep: boolean;
+  /** Set on the high-effort run: what the agent told the others it would do. */
+  readonly deepAnnouncement?: string;
 }
+
+const DEEP_OFFER = `If a good answer needs careful multi-step reasoning, such as calculations, tricky tradeoffs, or analyzing code or data, reply with one line instead: DEEP: <one sentence, in your own voice, telling the others what you're going to think through>. Use it only when it truly matters.`;
+const DEEP_SHARED = `If another advisor said they would think something through and then gave their answer, don't reason through the same thing again; respond to what they found.`;
 
 export function draftPrompt(
   context: DiscussionContext,
-  { forced, addressed, temperature }: DraftOptions,
+  { forced, addressed, temperature, allowDeep, deepAnnouncement }: DraftOptions,
 ): string {
+  const deep = deepAnnouncement
+    ? `You just said: "${deepAnnouncement}" Take the time to reason it through carefully, then give your considered answer.\n`
+    : '';
+  const offer = allowDeep && !deepAnnouncement ? `\n${DEEP_OFFER}` : '';
   const who = addressed.length
     ? `The user addressed ${addressed.join(' and ')} directly; only ${addressed.length > 1 ? 'they reply' : 'you reply'} this round, so answer them.`
     : 'The other agents are replying too.';
   return `${render(context)}
 
 Reply to the user's latest message from your perspective. ${who}
-${forced ? '' : `Passing is normal and expected. Reply with only PASS if you have nothing notable to add, if you already made your points in earlier rounds, or if the latest message is outside your perspective. Stay quiet until something raised touches what you care about.\n`}Put SPEAK on the first line, then your reply ${LENGTH}.
+${deep}${forced || deepAnnouncement ? '' : `Passing is normal and expected. Reply with only PASS if you have nothing notable to add, if you already made your points in earlier rounds, or if the latest message is outside your perspective. Stay quiet until something raised touches what you care about.\n`}Put SPEAK on the first line, then your reply ${LENGTH}.
 ${questionRule(context)}
-If one of your earlier questions is marked "not answered yet", the user chose to move on; do not repeat it unless it has become essential.${styleLine(temperature)}`;
+If one of your earlier questions is marked "not answered yet", the user chose to move on; do not repeat it unless it has become essential.
+${DEEP_SHARED}${offer}${styleLine(temperature)}`;
 }
 
 /** A trailing line for a non-default temperature; empty at the default. */
@@ -132,9 +145,9 @@ Before hearing the messages below the marker, you drafted:
 ${draft}
 
 Reply with exactly one of:
-KEEP (only that word) if your draft still adds something and does not contradict what was said.
-WITHDRAW (only that word) if others already made substantially the same point. Sharing a topic is not enough.
-REVISE on the first line, then an updated reply ${LENGTH}. Respond to what was said by talking directly to whoever said it ("Red, you're assuming..."), not about them: challenge any flaw your perspective sees, and drop points that were already covered.
+KEEP (only that word) only if your draft repeats nothing that was said below the marker, no point, example, or recommendation, and does not contradict it.
+WITHDRAW (only that word) if what's left once you remove everything already said isn't worth saying. Sharing a topic is not enough reason to withdraw.
+REVISE on the first line, then an updated reply ${LENGTH}. Cut every point and example someone already made, even if you'd phrase it differently. Lead with what only you are adding, not with agreement. If you take on someone's point, talk directly to that one person ("Red, you're assuming..."), not about them, and say where you see it differently.
 ${questionRule(context)}${styleLine(temperature)}`;
 }
 
@@ -167,10 +180,14 @@ export function parseReply(
 ): { action: ReplyAction; body: string } | undefined {
   const newline = raw.indexOf('\n');
   if (newline === -1 && !done) return undefined;
-  const header = (newline === -1 ? raw : raw.slice(0, newline))
-    .trim()
-    .toUpperCase();
+  const firstLine = (newline === -1 ? raw : raw.slice(0, newline)).trim();
+  const header = firstLine.toUpperCase();
   const rest = newline === -1 ? '' : raw.slice(newline + 1).trim();
+  if (header.replace(/^\*+/, '').startsWith('DEEP')) {
+    // The announcement keeps the agent's own wording and case.
+    const body = firstLine.replace(/^\**DEEP\**\s*:?\s*/i, '').trim();
+    return { action: 'deep', body };
+  }
   for (const action of ['pass', 'keep', 'withdraw'] as const) {
     if (header.startsWith(action.toUpperCase())) return { action, body: '' };
   }
