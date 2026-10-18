@@ -1,0 +1,98 @@
+[
+  { "kind": "user-message", "text": "I want to start a coffee subscription.", "id": 0 },
+  { "kind": "agent-message", "agent": "red", "text": "Pick one city and launch in 6 weeks.", "id": 1 },
+  { "kind": "agent-message", "agent": "blue", "text": "What evidence says people want this?\nQUESTION: What is your monthly budget?", "id": 2 },
+  { "kind": "user-message", "text": "About $5k a month.", "replyTo": 2, "id": 3 },
+  { "kind": "agent-message", "agent": "blue", "text": "With $5k, run a 2-week preorder test first.", "id": 4 }
+]
+
+
+
+The log is an EventBus (src/core/events.ts). Each Orchestrator creates one and exposes it as orchestrator.bus, but you can also 
+create one on its own.                                                                                                          
+Creating one
+
+import { EventBus } from './core/events.js';
+
+// On its own, e.g. for tests or replaying a saved session
+const bus = new EventBus();
+
+// The orchestrator's own log, which the agents read
+const bus = orchestrator.bus;
+
+Use orchestrator.bus for the live discussion. A separate new
+EventBus() starts empty, and the orchestrator never sees what you add to it.
+
+
+Code: bus.log
+Returns: readonly LogEvent[]
+
+
+────────────────────────────────────────
+Feature: Messages from one agent
+Code: bus.log.filter((e) => e.kind === 'agent-message' && e.agent ===
+
+'blue')
+Returns: LogEvent[]
+Notes:
+────────────────────────────────────────
+Feature: Your messages
+Code: bus.log.filter((e) => e.kind === 'user-message')
+Returns: LogEvent[]
+Notes:
+────────────────────────────────────────
+Feature: All questions
+Code: bus.log.filter((e) => e.kind === 'agent-message' &&
+findQuestion(e.text))
+Returns: LogEvent[]
+Notes: findQuestion is in src/agents/prompts.ts
+────────────────────────────────────────
+
+Feature: Export as JSON
+Code: JSON.stringify(bus.log, null, 2)
+Returns: string
+Notes: Plain data, so it converts as-is
+
+Message fields
+
+┌─────────┬──────────────┬───────────────┬────────────────────────┐
+│  Field  │ user-message │ agent-message │        Meaning         │
+├─────────┼──────────────┼───────────────┼────────────────────────┤
+│         │              │               │ Position in the log,   │
+│ id      │ ✓            │ ✓             │ starting at 0, in      │
+│         │              │               │ speaking order         │
+├─────────┼──────────────┼───────────────┼────────────────────────┤
+│ kind    │ ✓            │ ✓             │ Which of the two kinds │
+│         │              │               │  it is                 │
+├─────────┼──────────────┼───────────────┼────────────────────────┤
+│         │              │               │ The full message.      │
+│ text    │ ✓            │ ✓             │ Questions end with a   │
+│         │              │               │ QUESTION: line.        │
+├─────────┼──────────────┼───────────────┼────────────────────────┤
+│ agent   │ —            │ ✓             │ red, yellow, green or  │
+│         │              │               │ blue                   │
+├─────────┼──────────────┼───────────────┼────────────────────────┤
+│         │              │               │ The id of the agent    │
+│ replyTo │ optional     │ —             │ message whose question │
+│         │              │               │  this answers          │
+└─────────┴──────────────┴───────────────┴────────────────────────┘
+
+Related, but not part of the log
+
+┌──────────────────┬─────────────────────────────────────────────┐
+│     You want     │                     Use                     │
+├──────────────────┼─────────────────────────────────────────────┤
+│ The question     │ orchestrator.snapshot().pendingQuestion → { │
+│ waiting for an   │  agent, eventId, question }                 │
+│ answer right now │                                             │
+├──────────────────┼─────────────────────────────────────────────┤
+│ What an agent is │ orchestrator.agentState('blue')             │
+│  doing right now │                                             │
+├──────────────────┼─────────────────────────────────────────────┤
+│ The text an      │                                             │
+│ agent is still   │ orchestrator.snapshot().speaking            │
+│ streaming (not   │                                             │
+│ in the log yet)  │                                             │
+└──────────────────┴─────────────────────────────────────────────┘
+
+An agent's message joins the log only once it finishes speaking. Use snapshot().speaking to show the words as they stream in.

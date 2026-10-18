@@ -1,0 +1,56 @@
+orchestrator.agentState('blue')
+// → { activity: 'waiting' }
+This returns the state at that moment. The object never changes after it's returned, so call it again to see a newer state. It throws for an unknown agent id.
+
+Possible activity types:
+listening, thinking, waiting, reviewing, speaking, passing, has-question
+
+
+orchestrator.snapshot().agents.blue   // same data for one agent
+orchestrator.snapshot().agents        // all four at once
+The snapshot is the whole room at one moment. It's reused until something changes, which is what React/Ink expects. Besides agents, it includes:
+
+┌───────────────────────┬──────────────────────────────────────────────────────────────────────────────────────┐
+│         Field         │                                  What it tells you                                   │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ mode                  │ Room mode: initial-prompt, running, awaiting-user or paused                          │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ speaking              │ { agent, text }: who holds the floor and their text so far (updates while streaming) │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ queue                 │ Agents with finished drafts, in the order they'll speak                              │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ openQuestions         │ [{ agent, question }] asked this round                                               │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ lastTurn              │ { agent, result }: how the latest turn ended (spoke, passed, withdrew, failed)       │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ notice                │ Status or error text, e.g. "Rate limited; BLUE retries in 16s."                      │
+├───────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
+│ callsUsed / callLimit │ Usage so far against the hard limit                                                  │
+└───────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
+
+
+ 2. Get notified of changes (push)
+
+      // Called on ANY room change (state, streamed text, queue, notice…)
+      const unsubscribe = orchestrator.subscribe(() => {
+        const room = orchestrator.snapshot();
+      });
+
+      // Called only when one agent's state actually changes, with before and after
+      const unsubscribe = orchestrator.subscribeAgents((id, state, previous) => {
+        if (previous.activity !== 'speaking' && state.activity === 'speaking') {
+          startTalkingAnimation(id);
+        }
+      });
+      This is the best hook for linking a transition to a visual. It doesn't fire for streamed text, only for real state changes.
+
+      3. In the Ink TUI
+
+      const room = useSyncExternalStore(orchestrator.subscribe, orchestrator.snapshot);
+      room.agents.blue.activity
+      This re-renders automatically whenever anything changes.
+
+      4. The conversation itself
+
+orchestrator.bus.log                      // every message, in order, with speaker
+orchestrator.bus.subscribe((event) => …)  // called each time a message is added
