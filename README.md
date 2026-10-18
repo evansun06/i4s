@@ -1,6 +1,6 @@
 # The Idiots
 
-Four perspectives. One discussion. Your decision.
+Four perspectives. One discussion.
 
 The Idiots is a terminal app where four AI advisors talk your problem through with you, and with each other. Each has its own angle and personality, they argue when they disagree, and you lead: they reply to you, ask you when your answer matters, and stop when it is your turn.
 

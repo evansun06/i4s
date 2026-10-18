@@ -337,7 +337,7 @@ export function App({
       </Box>
       <Box height={1} flexShrink={0}>
         <Text color={theme.muted} wrap="truncate">
-          {visibleText(providerLabel)} · Four perspectives. Your decision.
+          {visibleText(providerLabel)}
         </Text>
       </Box>
       <Box height={chatHeight} flexShrink={0} overflow="hidden" marginTop={1}>
