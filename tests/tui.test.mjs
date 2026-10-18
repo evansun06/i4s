@@ -7,9 +7,13 @@ import { RateLimitError } from '../dist/providers/model.js';
 import { ChatController } from '../dist/ui/controller.js';
 import { complete, parseCommand } from '../dist/ui/commands.js';
 import { edit, editorWindow } from '../dist/ui/editor.js';
-import { IdleAnimation, loadSprites } from '../dist/ui/sprites.js';
+import {
+  FloorAnimation,
+  IdleAnimation,
+  loadSprites,
+} from '../dist/ui/sprites.js';
 import { parsePalette, palette, theme } from '../dist/ui/theme.js';
-import { activityLabel, roomLabel } from '../dist/ui/app.js';
+import { activityLabel, floorAgent, roomLabel } from '../dist/ui/app.js';
 
 async function until(predicate) {
   for (let i = 0; i < 500; i++) {
@@ -135,8 +139,20 @@ test('packaged sprites have valid frames and theme colors come directly from the
     for (const color of Object.values(colors)) assert.ok(values.has(color));
   }
   assert.throws(() => parsePalette('300 0 0 invalid'));
-  for (const frames of Object.values(loadSprites())) {
+  for (const sprites of Object.values(loadSprites())) {
+    const frames = sprites.idle;
     assert.equal(frames.length, 4);
+    assert.equal(sprites.toSpeak.length, 9);
+    assert.equal(sprites.toNotSpeak.length, 9);
+    assert.deepEqual(
+      sprites.toSpeak.map((frame) => frame.duration),
+      [...Array(8).fill(100), 1000],
+    );
+    assert.ok(sprites.toNotSpeak.every((frame) => frame.duration === 100));
+    for (const frame of [...sprites.toSpeak, ...sprites.toNotSpeak]) {
+      assert.equal(frame.rows.length, 8);
+      assert.ok(frame.rows.every((row) => row.length === 16));
+    }
     for (const frame of frames) {
       assert.equal(frame.rows.length, 8);
       assert.ok(frame.rows.every((row) => row.length === 16));
@@ -253,8 +269,10 @@ test('speaking follows paced playback, pause freezes it, and questions appear af
     );
     assert.equal(controller.snapshot().question, undefined);
     assert.equal(activityLabel(controller.snapshot(), 'red'), 'speaking');
+    assert.equal(floorAgent(controller.snapshot()), 'red');
     assert.equal(roomLabel(controller.snapshot()), 'Discussion');
     controller.accept('/pause');
+    assert.equal(floorAgent(controller.snapshot()), 'red');
     const shown = controller.snapshot().messages.at(-1).text;
     await delay(50);
     assert.equal(controller.snapshot().messages.at(-1).text, shown);
@@ -262,6 +280,7 @@ test('speaking follows paced playback, pause freezes it, and questions appear af
     await until(() => controller.snapshot().question);
     assert.equal(controller.snapshot().displaying, undefined);
     assert.equal(activityLabel(controller.snapshot(), 'red'), 'asking you');
+    assert.equal(floorAgent(controller.snapshot()), 'red');
   } finally {
     await controller.close();
   }
@@ -552,4 +571,74 @@ test('explicit hand raising reserves the floor without submitting a message or s
   } finally {
     await controller.close();
   }
+});
+
+test('floor animation enters once, holds, exits immediately, then resumes idle', () => {
+  for (const sprites of Object.values(loadSprites())) {
+    const animation = new FloorAnimation(sprites, 0, () => 0.5);
+    assert.equal(animation.frame(0, false), sprites.idle[0]);
+    assert.equal(animation.frame(100, true), sprites.toSpeak[0]);
+    assert.equal(animation.frame(199, true), sprites.toSpeak[0]);
+    assert.equal(animation.frame(200, true), sprites.toSpeak[1]);
+    assert.equal(animation.frame(900, true), sprites.toSpeak[8]);
+    // Leaving during the final 1000 ms frame must not wait for that frame.
+    assert.equal(animation.frame(901, false), sprites.toNotSpeak[0]);
+    assert.equal(animation.frame(1001, false), sprites.toNotSpeak[1]);
+    assert.equal(animation.frame(1701, false), sprites.toNotSpeak[8]);
+    assert.equal(animation.frame(1801, false), sprites.idle[0]);
+    assert.equal(animation.frame(3801, false), sprites.idle[0]);
+    assert.equal(animation.frame(4301, false), sprites.idle[1]);
+    assert.equal(animation.frame(5000, true), sprites.toSpeak[0]);
+    assert.equal(animation.frame(100000, true), sprites.toSpeak[8]);
+    assert.equal(animation.frame(200000, true), sprites.toSpeak[8]);
+  }
+});
+
+test('floor transitions overlap and follow the latest assignment when interrupted', () => {
+  const sprites = loadSprites().red;
+  const outgoing = new FloorAnimation(sprites, 0);
+  const incoming = new FloorAnimation(sprites, 0);
+  outgoing.frame(0, true);
+  assert.equal(outgoing.frame(800, true), sprites.toSpeak[8]);
+  assert.equal(outgoing.frame(900, false), sprites.toNotSpeak[0]);
+  assert.equal(incoming.frame(900, true), sprites.toSpeak[0]);
+  assert.equal(outgoing.frame(1000, false), sprites.toNotSpeak[1]);
+  assert.equal(incoming.frame(1000, true), sprites.toSpeak[1]);
+  assert.equal(outgoing.frame(1100, true), sprites.toSpeak[0]);
+  assert.equal(incoming.frame(1100, false), sprites.toNotSpeak[0]);
+  assert.equal(outgoing.frame(1200, true), sprites.toSpeak[1]);
+  assert.equal(incoming.frame(2000, false), sprites.idle[0]);
+});
+
+test('reduced motion uses static floor poses and idle-only sprites remain usable', () => {
+  const sprites = loadSprites().green;
+  const animation = new FloorAnimation(sprites, 0);
+  assert.equal(animation.frame(0, false, true), sprites.idle[0]);
+  assert.equal(animation.frame(100, true, true), sprites.toSpeak[8]);
+  assert.equal(animation.frame(200, false, true), sprites.idle[0]);
+  const idleOnly = new FloorAnimation(
+    { ...sprites, toSpeak: [], toNotSpeak: [] },
+    0,
+    () => 0.5,
+  );
+  assert.equal(idleOnly.frame(0, true), sprites.idle[0]);
+  assert.equal(idleOnly.frame(1500, true), sprites.idle[0]);
+  assert.equal(idleOnly.frame(2000, true), sprites.idle[1]);
+  assert.equal(idleOnly.frame(2100, false), sprites.idle[0]);
+});
+
+test('only visible speech or a revealed question owns the animated floor', () => {
+  const state = {
+    displaying: undefined,
+    question: undefined,
+    waiting: ['red'],
+  };
+  assert.equal(floorAgent(state), undefined);
+  state.displaying = 'red';
+  state.question = { agent: 'green' };
+  assert.equal(floorAgent(state), 'red');
+  state.displaying = undefined;
+  assert.equal(floorAgent(state), 'green');
+  state.question = undefined;
+  assert.equal(floorAgent(state), undefined);
 });
