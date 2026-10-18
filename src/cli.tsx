@@ -17,6 +17,7 @@ Usage: i4s [options]
   --model <name>       Model for every call, overriding the provider default
   --base-url <url>     OpenAI-compatible endpoint (required for custom)
   --call-limit <n>     Hard limit on model calls this session (default: 100)
+  --wpm <n>            Reading speed for replies (default: 340; 0 for instant)
   --forget-key         Remove the saved key for --provider (or the last used)
   -h, --help           Show this help
   -v, --version        Show the version
@@ -36,6 +37,7 @@ async function main() {
       model: { type: 'string' },
       'base-url': { type: 'string' },
       'call-limit': { type: 'string' },
+      wpm: { type: 'string' },
       'forget-key': { type: 'boolean' },
     },
     allowPositionals: false,
@@ -94,6 +96,10 @@ async function main() {
   if (!Number.isInteger(callLimit) || callLimit <= 0) {
     throw new Error('--call-limit must be a positive whole number.');
   }
+  const wordsPerMinute = Number(values.wpm ?? 340);
+  if (!Number.isFinite(wordsPerMinute) || wordsPerMinute < 0) {
+    throw new Error('--wpm must be 0 or a positive number.');
+  }
 
   const { chooseProvider } = await import('./ui/setup.js');
   const { provider: providerId, apiKey } = await chooseProvider(requested);
@@ -139,6 +145,7 @@ async function main() {
   const id = session?.id ?? newSessionId();
   const createdAt = session?.createdAt ?? new Date().toISOString();
   await runPlain(orchestrator, panel, {
+    wordsPerMinute,
     // Saved after every round, so quitting at any prompt loses nothing.
     afterRound: async () => {
       const discussion = orchestrator.save();

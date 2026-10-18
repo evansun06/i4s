@@ -56,6 +56,8 @@ export interface RoomSnapshot {
   readonly agents: Readonly<Record<AgentId, AgentState>>;
   /** Agents with a finished draft, in the order they will take the floor. */
   readonly queue: readonly AgentId[];
+  /** Agents @mentioned this round, the only ones replying; empty means all. */
+  readonly mentioned: readonly AgentId[];
   readonly speaking?: { readonly agent: AgentId; readonly text: string };
   /** Set while the room waits for the user to answer this question. */
   readonly pendingQuestion?: {
