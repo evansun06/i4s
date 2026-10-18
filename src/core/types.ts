@@ -62,6 +62,10 @@ export interface RoomSnapshot {
   readonly queue: readonly AgentId[];
   /** Agents @mentioned this round, the only ones replying; empty means all. */
   readonly mentioned: readonly AgentId[];
+  /** The user asked for the floor; the round ends after the current speaker. */
+  readonly handRaised: boolean;
+  /** Angry mode: the advisors take offense and trade comedic insults. */
+  readonly angry: boolean;
   /** Each agent's boldness, 0 to 1; 0.5 is its normal self. */
   readonly temperatures: Readonly<Record<AgentId, number>>;
   readonly speaking?: { readonly agent: AgentId; readonly text: string };
