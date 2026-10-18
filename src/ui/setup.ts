@@ -141,10 +141,13 @@ async function addKey(provider?: ProviderId): Promise<ChosenProvider> {
         value: id,
       })),
     }));
-  await keychain.set(resolved, apiKey);
+  const { label, envVar } = presets[resolved];
+  const saved = await keychain.set(resolved, apiKey);
   process.stdout.write(
     ansiColor(
-      `${presets[resolved].label} key saved to your system keychain.\n`,
+      saved
+        ? `${label} key saved to your system keychain.\n`
+        : `No system keychain is available, so this key is only used for this session. Set ${envVar} to skip this step next time.\n`,
       theme.text,
     ),
   );

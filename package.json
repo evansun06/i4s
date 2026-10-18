@@ -1,8 +1,27 @@
 {
-  "name": "the-idiots",
-  "version": "0.0.0",
-  "private": true,
+  "name": "idiots",
+  "version": "0.1.0",
   "description": "Four perspectives. One discussion. Your decision.",
+  "keywords": [
+    "ai",
+    "cli",
+    "tui",
+    "terminal",
+    "agents",
+    "llm",
+    "discussion",
+    "brainstorming"
+  ],
+  "license": "MIT",
+  "author": "Jacob <jacobzhen7@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evansun06/i4s.git"
+  },
+  "homepage": "https://github.com/evansun06/i4s#readme",
+  "bugs": {
+    "url": "https://github.com/evansun06/i4s/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -34,9 +53,11 @@
     "@inquirer/password": "^5.2.3",
     "@inquirer/select": "^5.2.6",
     "ink": "^7.0.6",
-    "keytar": "^7.9.0",
     "react": "^19.2.4",
     "string-width": "^8.3.0"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
