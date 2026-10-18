@@ -642,3 +642,80 @@ test('only visible speech or a revealed question owns the animated floor', () =>
   state.question = undefined;
   assert.equal(floorAgent(state), undefined);
 });
+
+test('Enter completes an open / or @ suggestion, then sends once it matches', async () => {
+  const { completionOnEnter } = await import('../dist/ui/commands.js');
+  // Partly typed: Enter completes, like Tab.
+  assert.equal(completionOnEnter('/he', 3, 0)?.value, '/help ');
+  assert.equal(completionOnEnter('@ble', 4, 0)?.value, '@bleu ');
+  // Fully typed: Enter sends instead of completing again.
+  assert.equal(completionOnEnter('/help', 5, 0), undefined);
+  assert.equal(completionOnEnter('/help ', 6, 0), undefined);
+  // Plain messages have no suggestions, so Enter sends.
+  assert.equal(completionOnEnter('hello there', 11, 0), undefined);
+});
+
+test('reading speed steps within range and can change while someone speaks', async () => {
+  const { nextReadingSpeed, READING_SPEED } =
+    await import('../dist/ui/controller.js');
+  assert.equal(nextReadingSpeed(340, 1), 380);
+  assert.equal(nextReadingSpeed(340, -1), 300);
+  assert.equal(nextReadingSpeed(READING_SPEED.max, 1), READING_SPEED.max);
+  assert.equal(nextReadingSpeed(READING_SPEED.min, -1), READING_SPEED.min);
+  assert.equal(nextReadingSpeed(0, -1), READING_SPEED.max); // instant -> slowest step down
+  assert.equal(nextReadingSpeed(0, 1), 0);
+
+  const { controller } = fixture(() => 'PASS', { wpm: 340 });
+  assert.equal(controller.snapshot().wordsPerMinute, 340);
+  assert.equal(controller.adjustReadingSpeed(1), 380);
+  assert.equal(controller.snapshot().wordsPerMinute, 380);
+  await controller.close();
+});
+
+test('the pacer picks up a speed change partway through a reply', async () => {
+  const { Pacer } = await import('../dist/ui/pacer.js');
+  const pacer = new Pacer(() => {}, {
+    wordsPerMinute: 60,
+    pauseBetweenSpeakersMs: 0,
+  });
+  let shown = '';
+  const reply = pacer.speech('', { text: (text) => (shown = text) });
+  reply.update('x'.repeat(200)); // about 33 s at 60 wpm
+  reply.finish();
+  await delay(50);
+  assert.ok(shown.length < 20, `slow start showed ${shown.length}`);
+  pacer.setWordsPerMinute(0); // instant from here on
+  await pacer.idle();
+  assert.equal(shown.length, 200);
+});
+
+test('**bold** spans render bold without asterisks, even mid-stream', async () => {
+  const { boldRuns } = await import('../dist/ui/message-text.js');
+  assert.deepEqual(boldRuns('Ship **now**, not later.'), [
+    { text: 'Ship ', bold: false },
+    { text: 'now', bold: true },
+    { text: ', not later.', bold: false },
+  ]);
+  assert.deepEqual(
+    boldRuns('**a** and **b**')
+      .filter((r) => r.bold)
+      .map((r) => r.text),
+    ['a', 'b'],
+  );
+  // A finished reply keeps an unmatched ** as written.
+  assert.deepEqual(boldRuns('5 ** 2'), [{ text: '5 ** 2', bold: false }]);
+  // Mid-stream, an opening ** starts bold at once instead of showing.
+  assert.deepEqual(boldRuns('This is **impor', true), [
+    { text: 'This is ', bold: false },
+    { text: 'impor', bold: true },
+  ]);
+  assert.deepEqual(boldRuns('plain'), [{ text: 'plain', bold: false }]);
+});
+
+test('mouse wheel reports scroll the chat and are never typed into the editor', async () => {
+  const { mouseWheel } = await import('../dist/ui/app.js');
+  assert.equal(mouseWheel('\u001b[<64;10;5M'), -3); // wheel up
+  assert.equal(mouseWheel('[<65;10;5M'), 3); // wheel down, escape stripped by Ink
+  assert.equal(mouseWheel('[<0;10;5M'), 0); // a click: mouse noise, no scroll
+  assert.equal(mouseWheel('hello'), undefined);
+});

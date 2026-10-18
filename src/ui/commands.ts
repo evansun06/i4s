@@ -17,7 +17,7 @@ export const commands = [
 
 export const helpText =
   commands.map(({ name, help }) => `${name}  ${help}`).join('\n') +
-  '\n\nCtrl+R raise hand · Tab complete · ↑↓ suggestions/history · Esc dismiss · PgUp/PgDn scroll · Ctrl+End live · Ctrl+C quit';
+  '\n\nTab or Enter complete · ↑↓ or mouse wheel scroll (or pick a suggestion) · PgUp/PgDn page · Ctrl+End live · Ctrl+P/Ctrl+N history · Ctrl+Q slower · Ctrl+E faster · Ctrl+R raise hand · Esc dismiss · Ctrl+C quit';
 
 export interface Completion {
   readonly label: string;
@@ -67,6 +67,22 @@ export function complete(input: string, cursor = input.length): Completion[] {
         cursor: completed.length,
       };
     });
+}
+
+/**
+ * What Enter does while suggestions are open: complete the selected one, like
+ * Tab. Returns undefined, meaning send, once the text already matches it, so a
+ * fully typed command such as "/help" runs on the first Enter.
+ */
+export function completionOnEnter(
+  input: string,
+  cursor: number,
+  selected: number,
+): Completion | undefined {
+  const choice = complete(input, cursor)[selected];
+  return choice && choice.value.trimEnd() !== input.trimEnd()
+    ? choice
+    : undefined;
 }
 
 export type Command =
