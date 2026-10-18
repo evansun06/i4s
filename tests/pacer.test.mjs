@@ -60,3 +60,21 @@ test('reading speed sets how long a reply takes to show', async () => {
   const elapsed = Date.now() - start;
   assert.ok(elapsed >= 350 && elapsed <= 900, `took ${elapsed} ms`);
 });
+
+test('showing names whoever is on screen, not whoever the engine is on', async () => {
+  const pacer = new Pacer(() => {}, {
+    wordsPerMinute: 600,
+    pauseBetweenSpeakersMs: 0,
+  });
+  const red = pacer.speech('RED: ', { speaker: 'RED' });
+  const blue = pacer.speech('BLUE: ', { speaker: 'BLUE' });
+  red.update('A long enough reply to still be showing.');
+  red.finish();
+  blue.update('Done already.');
+  blue.finish();
+  await delay(30);
+  // Blue's reply is complete, but Red is still the one on screen.
+  assert.equal(pacer.showing, 'RED');
+  await pacer.idle();
+  assert.equal(pacer.showing, undefined);
+});

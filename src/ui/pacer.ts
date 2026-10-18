@@ -12,6 +12,7 @@ export interface Utterance {
 }
 
 export interface SpeechObserver {
+  readonly speaker?: string;
   start?(): void;
   text?(text: string): void;
   finish?(): void;
@@ -23,6 +24,7 @@ type Item =
       readonly kind: 'speech';
       readonly label: string;
       readonly observer: SpeechObserver;
+      readonly speaker: string | undefined;
       text: string;
       finished: boolean;
       wake?: (() => void) | undefined;
@@ -48,6 +50,7 @@ export class Pacer {
   #disposed = false;
   readonly #pauseWaiters = new Set<() => void>();
   readonly #timers = new Map<ReturnType<typeof setTimeout>, () => void>();
+  #showing: string | undefined;
 
   constructor(write: (text: string) => void, options: PacerOptions) {
     this.#write = write;
@@ -60,11 +63,17 @@ export class Pacer {
     this.#run();
   }
 
+  /** Who is on screen right now, which may trail the engine's speaker. */
+  get showing(): string | undefined {
+    return this.#showing;
+  }
+
   speech(label: string, observer: SpeechObserver = {}): Utterance {
     const item: Item & { kind: 'speech' } = {
       kind: 'speech',
       label,
       observer,
+      speaker: observer.speaker,
       text: '',
       finished: false,
     };
@@ -101,6 +110,7 @@ export class Pacer {
 
   dispose(): void {
     this.#disposed = true;
+    this.#showing = undefined;
     this.setPaused(false);
     for (const [timer, wake] of this.#timers) {
       clearTimeout(timer);
@@ -148,6 +158,7 @@ export class Pacer {
 
   async #speak(item: Item & { kind: 'speech' }): Promise<void> {
     const charsPerSecond = (this.#options.wordsPerMinute * CHARS_PER_WORD) / 60;
+    this.#showing = item.speaker;
     this.#write(item.label);
     item.observer.start?.();
     let shown = 0;
@@ -192,6 +203,7 @@ export class Pacer {
       }
     }
     this.#write('\n\n');
+    this.#showing = undefined;
     item.observer.finish?.();
   }
 
