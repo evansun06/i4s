@@ -56,7 +56,6 @@ export function nextReadingSpeed(current: number, direction: 1 | -1): number {
   const { step, min, max } = READING_SPEED;
   if (current === 0) return direction > 0 ? 0 : max;
   return Math.max(min, Math.min(max, current + direction * step));
-
 }
 
 export class ChatController {
