@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { join } from 'node:path';
 import {
   isProviderId,
   presets,
@@ -31,6 +32,8 @@ Usage: i4s [options]
 At startup, pick a saved key or paste a new one; the provider is detected
 from the key. Keys in a provider's environment variable (such as
 GEMINI_API_KEY) are used as is. Type /quit or press Ctrl+C to quit.
+/draw pauses the TUI and generates maps from the saved session (repository
+checkout; requires excalidraw-pipeline dependencies and an OpenAI key).
 `;
 
 async function main() {
@@ -189,6 +192,8 @@ async function main() {
       orchestrator.dispose();
     }
   } else {
+    const { SESSIONS_DIR } = await import('./storage/sessions.js');
+    const { createDrawingPipeline } = await import('./drawing/pipeline.js');
     const { render } = await import('ink');
     const { App } = await import('./ui/app.js');
     const { ChatController } = await import('./ui/controller.js');
@@ -197,6 +202,10 @@ async function main() {
     const controller = new ChatController(orchestrator, {
       wordsPerMinute,
       save,
+      draw: createDrawingPipeline({
+        sessionFile: join(SESSIONS_DIR, `${id}.json`),
+        outputDirectory: join(SESSIONS_DIR, `${id}-draws`),
+      }),
     });
     try {
       await render(

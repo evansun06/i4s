@@ -233,6 +233,12 @@ export async function runPlain(
       );
       if (!input) continue;
       if (input.toLowerCase() === 'exit') break;
+      if (/^\/draw\b/i.test(input)) {
+        out.write(
+          '  /draw is available in the full TUI. Restart without --plain.\n\n',
+        );
+        continue;
+      }
 
       // "/angry", "/angry on", "/angry off": a command, not a message.
       const angry = /^\/angry\b\s*(on|off)?\s*$/i.exec(input);

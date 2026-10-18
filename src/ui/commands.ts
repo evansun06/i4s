@@ -6,6 +6,7 @@ export const commands = [
   { name: '/help', help: 'Commands and keyboard controls' },
   { name: '/pause', help: 'Pause the room and playback' },
   { name: '/resume', help: 'Resume the room and playback' },
+  { name: '/draw', help: 'Pause and generate maps from this saved session' },
   { name: '/budget', help: '<calls> Add to the call allowance' },
   { name: '/temp', help: '[agent|all] [0–1|reset] Boldness' },
   { name: '/think', help: '[agents] <message> Think deeply' },
@@ -76,7 +77,9 @@ export type Command =
       answer: boolean;
       deep?: readonly AgentId[];
     }
-  | { kind: 'help' | 'pause' | 'resume' | 'queue' | 'unqueue' | 'quit' }
+  | {
+      kind: 'help' | 'pause' | 'resume' | 'draw' | 'queue' | 'unqueue' | 'quit';
+    }
   | { kind: 'budget'; by: number }
   | { kind: 'temp'; settings: readonly TemperatureSetting[] }
   | { kind: 'error'; text: string };
@@ -92,6 +95,7 @@ export function parseCommand(input: string): Command {
     'help',
     'pause',
     'resume',
+    'draw',
     'queue',
     'unqueue',
     'quit',
