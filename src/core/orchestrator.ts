@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TEMPERATURE,
   draftPrompt,
   findMentions,
   findQuestion,
@@ -52,6 +53,7 @@ export interface SavedDiscussion {
   readonly summary: string;
   readonly foldedUpTo: number;
   readonly pendingQuestion?: RoomSnapshot['pendingQuestion'];
+  readonly temperatures?: Partial<Record<AgentId, number>>;
 }
 
 // A ceiling, not a target: thinking models spend part of it before answering.
@@ -90,6 +92,7 @@ export class Orchestrator {
   }[] = [];
   /** Agents @mentioned this round; empty means everyone takes part. */
   #mentioned: readonly AgentId[] = [];
+  readonly #temperatures = new Map<AgentId, number>();
   #floorBusy = false;
   /** Drafts that never saw this log entry are dropped and redrafted. */
   #discardBefore = -1;
@@ -119,6 +122,10 @@ export class Orchestrator {
     this.#keepTokens = options.keepTokens ?? 3000;
     for (const agent of this.#agents) {
       this.#agentStates.set(agent.id, { activity: 'listening' });
+      this.#temperatures.set(
+        agent.id,
+        agent.temperature ?? DEFAULT_TEMPERATURE,
+      );
     }
 
     const saved = options.restore;
@@ -126,6 +133,11 @@ export class Orchestrator {
     if (!saved?.log.length) return;
     this.#summary = saved.summary;
     this.#foldedUpTo = saved.foldedUpTo;
+    for (const [id, value] of Object.entries(saved.temperatures ?? {})) {
+      if (this.#temperatures.has(id as AgentId) && isTemperature(value)) {
+        this.#temperatures.set(id as AgentId, value);
+      }
+    }
     this.#mode = 'awaiting-user';
     for (const event of this.bus.log) {
       if (event.kind === 'agent-message')
@@ -147,6 +159,7 @@ export class Orchestrator {
       log: [...this.bus.log],
       summary: this.#summary,
       foldedUpTo: this.#foldedUpTo,
+      temperatures: Object.fromEntries(this.#temperatures),
       ...(this.#pendingQuestion && { pendingQuestion: this.#pendingQuestion }),
     };
   }
@@ -161,6 +174,10 @@ export class Orchestrator {
       >,
       queue: this.#floorQueue.map((waiter) => waiter.agent),
       mentioned: this.#mentioned,
+      temperatures: Object.fromEntries(this.#temperatures) as Record<
+        AgentId,
+        number
+      >,
       callsUsed: this.#callsUsed,
       callLimit: this.#callLimit,
       ...(this.#speaking && { speaking: this.#speaking }),
@@ -283,6 +300,23 @@ export class Orchestrator {
     return true;
   }
 
+  /**
+   * Sets how boldly an agent's personality comes through, for one agent or
+   * all: 0 is generic, 0.5 is its normal self, 1 is its voice at full volume.
+   * Takes effect on their next reply; the model's own temperature is untouched.
+   */
+  setTemperature(target: AgentId | 'all', value: number): void {
+    if (!isTemperature(value)) {
+      throw new Error('Temperature must be a number from 0 to 1.');
+    }
+    const ids = target === 'all' ? [...this.#temperatures.keys()] : [target];
+    for (const id of ids) {
+      if (!this.#temperatures.has(id)) throw new Error(`Unknown agent ${id}.`);
+      this.#temperatures.set(id, value);
+    }
+    this.#changed();
+  }
+
   raiseCallLimit(by: number): void {
     this.#callLimit += by;
     this.#changed();
@@ -317,6 +351,7 @@ export class Orchestrator {
         system: agent.systemPrompt,
         prompt: draftPrompt(this.#context(), {
           forced,
+          temperature: this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
           addressed: this.#mentioned.map(
             (id) => this.#agents.find((other) => other.id === id)?.name ?? id,
           ),
@@ -395,6 +430,7 @@ export class Orchestrator {
           draft,
           this.#context(),
           heardUpTo - this.#foldedUpTo,
+          this.#temperatures.get(agent.id) ?? DEFAULT_TEMPERATURE,
         ),
         maxOutputTokens: REPLY_TOKENS,
       })) {
@@ -657,6 +693,10 @@ export class Orchestrator {
 /** Rough and provider-neutral; only used to decide when to condense. */
 function estimateTokens(events: Parameters<typeof transcript>[0]): number {
   return Math.ceil(transcript(events).length / 4);
+}
+
+function isTemperature(value: unknown): value is number {
+  return typeof value === 'number' && value >= 0 && value <= 1;
 }
 
 function errorMessage(error: unknown): string {

@@ -1,1 +1,36 @@
 /new <msg> overrides question and prompts new cycle
+@colour singles out specific agents
+
+Each agent has a temperature from 0 to 1. Before every reply, it becomes a style instruction at the end of that agent's prompt:
+
+┌─────────┬───────────────────────────────────────────────────────┐
+│  Value  │                What the agent is told                 │
+├─────────┼───────────────────────────────────────────────────────┤
+│         │ Turn your personality almost all the way down: a      │
+│ 0–0.2   │ neutral, generic advisor with little of your usual    │
+│         │ angle or voice                                        │
+├─────────┼───────────────────────────────────────────────────────┤
+│ 0.2–0.5 │ Tone it down: keep your perspective, but sound more   │
+│         │ measured, closer to the others                        │
+├─────────┼───────────────────────────────────────────────────────┤
+│ 0.5     │ Nothing added. Its normal self.                       │
+├─────────┼───────────────────────────────────────────────────────┤
+│ 0.5–0.8 │ Turn it up: lean harder into your perspective and     │
+│         │ voice, take stronger positions                        │
+├─────────┼───────────────────────────────────────────────────────┤
+│         │ All the way up: the most extreme, distinct version of │
+│ 0.8–1   │  yourself, with your perspective, voice and blind     │
+│         │ spot at full volume                                   │
+└─────────┴───────────────────────────────────────────────────────┘
+
+While chatting:
+/temp                  → shows everyone's temperature
+/temp 0.8              → everyone
+/temp yellow 0.9       → one agent (also /temp @yellow 0.9)
+/temp yellow=0.9, blue=0.2
+/temp reset sets everyone back to 0.5
+npm run demo -- --temperature 0.7
+npm run demo -- --temperature "yellow=0.9,blue=0.2"
+In code: orchestrator.setTemperature('yellow', 0.9), or 'all'. Current values are in snapshot().temperatures.
+
+Changes apply from each agent's next reply. They're saved with the discussion, so a continued discussion keeps its settings. A --temperature flag at startup overrides the saved values.

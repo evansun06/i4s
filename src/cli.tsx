@@ -18,6 +18,10 @@ Usage: i4s [options]
   --base-url <url>     OpenAI-compatible endpoint (required for custom)
   --call-limit <n>     Hard limit on model calls this session (default: 100)
   --wpm <n>            Reading speed for replies (default: 340; 0 for instant)
+  --temperature <t>    Boldness, 0 (generic) to 1 (full personality); 0.5 is
+                       normal. "0.7" for everyone, or
+                       per agent, e.g. "yellow=0.9,blue=0.2". Change it while
+                       chatting with /temp.
   --forget-key         Remove the saved key for --provider (or the last used)
   -h, --help           Show this help
   -v, --version        Show the version
@@ -38,6 +42,7 @@ async function main() {
       'base-url': { type: 'string' },
       'call-limit': { type: 'string' },
       wpm: { type: 'string' },
+      temperature: { type: 'string' },
       'forget-key': { type: 'boolean' },
     },
     allowPositionals: false,
@@ -100,6 +105,20 @@ async function main() {
   if (!Number.isFinite(wordsPerMinute) || wordsPerMinute < 0) {
     throw new Error('--wpm must be 0 or a positive number.');
   }
+  const { panel } = await import('./agents/panel.js');
+  const { parseTemperatures } = await import('./ui/temperature.js');
+  const temperatures =
+    values.temperature === undefined
+      ? []
+      : parseTemperatures(
+          values.temperature,
+          panel.map((agent) => agent.id),
+        );
+  if (!temperatures) {
+    throw new Error(
+      '--temperature takes 0 to 1, e.g. "0.7" or "yellow=0.9,blue=0.2".',
+    );
+  }
 
   const { chooseProvider } = await import('./ui/setup.js');
   const { provider: providerId, apiKey } = await chooseProvider(requested);
@@ -134,7 +153,6 @@ async function main() {
   const session = await chooseSession();
 
   const { Orchestrator } = await import('./core/orchestrator.js');
-  const { panel } = await import('./agents/panel.js');
   const { runPlain } = await import('./ui/plain.js');
   const orchestrator = new Orchestrator({
     agents: panel,
@@ -142,6 +160,10 @@ async function main() {
     callLimit,
     ...(session && { restore: session.discussion }),
   });
+  // A flag given now wins over what the discussion was saved with.
+  for (const { target, value } of temperatures) {
+    orchestrator.setTemperature(target, value);
+  }
   const id = session?.id ?? newSessionId();
   const createdAt = session?.createdAt ?? new Date().toISOString();
   await runPlain(orchestrator, panel, {

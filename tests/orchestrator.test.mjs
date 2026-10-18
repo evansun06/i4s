@@ -569,3 +569,75 @@ test('answering with an @mention drops other held drafts', async () => {
   assert.deepEqual(said(orchestrator).slice(1), ['red: red on $5k']);
   assert.equal(orchestrator.agentState('blue').activity, 'listening');
 });
+
+test('temperature is boldness; the default leaves prompts unchanged', async () => {
+  const { draftPrompt, reviewPrompt } =
+    await import('../dist/agents/prompts.js');
+  const { provider, orchestrator } = room((kind, agent) =>
+    agent === 'yellow' ? 'SPEAK\nok' : 'PASS',
+  );
+  const prompt = (agent) =>
+    provider.calls.findLast((c) => c.agent === agent && c.kind === 'draft')
+      .prompt;
+
+  // Everyone starts at 0.5, which adds nothing: the prompt is as it always was.
+  assert.deepEqual(orchestrator.snapshot().temperatures, {
+    red: 0.5,
+    yellow: 0.5,
+    green: 0.5,
+    blue: 0.5,
+  });
+  await orchestrator.submit('ideas?');
+  assert.doesNotMatch(prompt('yellow'), /boldness/i);
+  assert.match(prompt('yellow'), /it has become essential\.$/);
+  const context = { summary: '', recent: [], answered: new Set() };
+  const options = { forced: false, addressed: [] };
+  const before = draftPrompt(context, { ...options, temperature: 0.5 });
+  assert.equal(before.endsWith('it has become essential.'), true);
+  assert.equal(
+    reviewPrompt('draft', context, 0, 0.5).includes('boldness'),
+    false,
+  );
+
+  orchestrator.setTemperature('all', 0.1);
+  orchestrator.setTemperature('yellow', 1);
+  await orchestrator.submit('more ideas?');
+  assert.match(
+    prompt('yellow'),
+    /boldness is 1\.0 out of 1, where 0\.5 is your normal self\. Turn your personality all the way up/,
+  );
+  assert.match(prompt('red'), /boldness is 0\.1 .*almost all the way down/);
+  assert.match(prompt('red'), /Never invent facts/);
+  assert.throws(() => orchestrator.setTemperature('red', 1.5), /0 to 1/);
+
+  // Kept with the discussion.
+  const resumed = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit: 50,
+    restore: JSON.parse(JSON.stringify(orchestrator.save())),
+  });
+  assert.equal(resumed.snapshot().temperatures.yellow, 1);
+  assert.equal(resumed.snapshot().temperatures.blue, 0.1);
+});
+
+test('temperature settings parse from flags and /temp', async () => {
+  const { parseTemperatures } = await import('../dist/ui/temperature.js');
+  const ids = ['red', 'yellow', 'green', 'blue'];
+  assert.deepEqual(parseTemperatures('0.7', ids), [
+    { target: 'all', value: 0.7 },
+  ]);
+  assert.deepEqual(parseTemperatures('@Yellow 0.9', ids), [
+    { target: 'yellow', value: 0.9 },
+  ]);
+  assert.deepEqual(parseTemperatures('yellow=0.9, blue=.2', ids), [
+    { target: 'yellow', value: 0.9 },
+    { target: 'blue', value: 0.2 },
+  ]);
+  assert.equal(parseTemperatures('purple 0.5', ids), undefined);
+  assert.equal(parseTemperatures('red 2', ids), undefined);
+  assert.equal(parseTemperatures('hot', ids), undefined);
+  assert.deepEqual(parseTemperatures('reset', ids), [
+    { target: 'all', value: 0.5 },
+  ]);
+});
