@@ -42,6 +42,21 @@ export interface PresentationSnapshot {
   readonly question: RoomSnapshot['pendingQuestion'];
   readonly closing: boolean;
   readonly drawing?: DrawingState;
+  /** Playback speed; 0 shows replies instantly. */
+  readonly wordsPerMinute: number;
+}
+
+export const READING_SPEED = { step: 40, min: 100, max: 1000 } as const;
+
+/**
+ * The next reading speed one step slower (-1) or faster (+1), within
+ * READING_SPEED's range. Instant playback (0) counts as faster than the max.
+ */
+export function nextReadingSpeed(current: number, direction: 1 | -1): number {
+  const { step, min, max } = READING_SPEED;
+  if (current === 0) return direction > 0 ? 0 : max;
+  return Math.max(min, Math.min(max, current + direction * step));
+
 }
 
 export class ChatController {
@@ -142,6 +157,7 @@ export class ChatController {
           : undefined,
       closing: this.#closing,
       ...(this.#drawing && { drawing: this.#drawing }),
+      wordsPerMinute: this.#pacer.wordsPerMinute,
     };
     return this.#snapshot;
   };
@@ -221,6 +237,17 @@ export class ChatController {
       ...(link ? { link } : {}),
     });
     this.#changed();
+  }
+
+  /**
+   * One step slower (-1) or faster (+1). Works any time, including while
+   * someone is speaking; returns the new words per minute.
+   */
+  adjustReadingSpeed(direction: 1 | -1): number {
+    const next = nextReadingSpeed(this.#pacer.wordsPerMinute, direction);
+    this.#pacer.setWordsPerMinute(next);
+    this.#changed();
+    return next;
   }
 
   /** Reserve the next turn without submitting or changing the editor. */

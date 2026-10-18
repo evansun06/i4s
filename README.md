@@ -60,7 +60,18 @@ Then pick a new discussion or continue a previous one, and say what you're worki
 | `/help`                           | Commands and keyboard controls                                                                |
 | `/quit`                           | Save and exit                                                                                 |
 
-Keyboard: Tab completes, ↑↓ browse suggestions and history, PgUp/PgDn scroll, Ctrl+End jumps back to live, Ctrl+C quits.
+| Key             | What it does                                                                      |
+| --------------- | --------------------------------------------------------------------------------- |
+| Enter or Tab    | Complete a `/` command or `@name` suggestion; Enter sends once it's complete      |
+| ↑ ↓             | Scroll the chat (or pick a suggestion while the list is open)                     |
+| Mouse wheel     | Scroll the chat                                                                   |
+| PgUp / PgDn     | Scroll a page; Ctrl+End jumps back to live                                        |
+| Ctrl+Q / Ctrl+E | Slower / faster reading speed, any time, even mid-reply (Alt+Q / Alt+E also work) |
+| Ctrl+P / Ctrl+N | Previous / next message you sent                                                  |
+| Ctrl+R          | Raise your hand: you speak after the current speaker                              |
+| Ctrl+C          | Save and quit                                                                     |
+
+The reading speed shows in the top bar. Terminals never pass the Command key through to apps, so the speed keys use Ctrl (or Alt) on every platform. While the app is open it handles the mouse wheel itself, so in most terminals hold Shift to select text with the mouse.
 
 ## Drawing maps (repository checkout)
 
@@ -124,7 +135,8 @@ not copy or move your data, and is not included in commits or other checkouts.
 --model <name>       Use a specific model for every call
 --base-url <url>     Any OpenAI-compatible endpoint (with --provider custom)
 --call-limit <n>     Hard limit on model calls per session (default: 100)
---wpm <n>            Reading speed for replies (default: 340; 0 for instant)
+--wpm <n>            Starting reading speed (default: 340; 0 for instant);
+                     Ctrl+Q / Ctrl+E change it while you chat
 --temperature <t>    Starting boldness, e.g. 0.7 or "yellow=0.9,blue=0.2"
 --angry              Angry mode: the advisors take offense and trade insults
 --plain              A plain-text transcript instead of the full interface

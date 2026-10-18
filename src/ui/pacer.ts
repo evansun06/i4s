@@ -41,7 +41,8 @@ const FRAME_MS = 16;
  */
 export class Pacer {
   readonly #write: (text: string) => void;
-  readonly #options: PacerOptions;
+  readonly #pauseBetweenSpeakersMs: number;
+  #wordsPerMinute: number;
   readonly #items: Item[] = [];
   readonly #idleWaiters: (() => void)[] = [];
   #running = false;
@@ -54,7 +55,17 @@ export class Pacer {
 
   constructor(write: (text: string) => void, options: PacerOptions) {
     this.#write = write;
-    this.#options = options;
+    this.#wordsPerMinute = options.wordsPerMinute;
+    this.#pauseBetweenSpeakersMs = options.pauseBetweenSpeakersMs;
+  }
+
+  get wordsPerMinute(): number {
+    return this.#wordsPerMinute;
+  }
+
+  /** Takes effect immediately, even partway through a reply; 0 is instant. */
+  setWordsPerMinute(wordsPerMinute: number): void {
+    this.#wordsPerMinute = Math.max(0, wordsPerMinute);
   }
 
   /** A status line, shown in order after anything already queued. */
@@ -144,8 +155,9 @@ export class Pacer {
       if (item.kind === 'line') {
         this.#write(item.text);
       } else {
-        if (this.#spokeLast)
-          await this.#sleep(this.#options.pauseBetweenSpeakersMs);
+        // Instant playback skips the thinking beat too.
+        if (this.#spokeLast && this.#wordsPerMinute > 0)
+          await this.#sleep(this.#pauseBetweenSpeakersMs);
         await this.#ready();
         if (this.#disposed) break;
         await this.#speak(item);
@@ -157,7 +169,6 @@ export class Pacer {
   }
 
   async #speak(item: Item & { kind: 'speech' }): Promise<void> {
-    const charsPerSecond = (this.#options.wordsPerMinute * CHARS_PER_WORD) / 60;
     this.#showing = item.speaker;
     this.#write(item.label);
     item.observer.start?.();
@@ -166,8 +177,10 @@ export class Pacer {
     // frame shows however many letters are due by the clock.
     let due = 1;
     let last = Date.now();
-    const maxPerFrame = Math.max(1, (charsPerSecond * FRAME_MS * 2) / 1000);
     while (true) {
+      // Read every frame, so a speed change applies mid-reply.
+      const charsPerSecond = (this.#wordsPerMinute * CHARS_PER_WORD) / 60;
+      const maxPerFrame = Math.max(1, (charsPerSecond * FRAME_MS * 2) / 1000);
       if (this.#paused) {
         await this.#ready();
         last = Date.now();
