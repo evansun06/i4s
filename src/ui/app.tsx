@@ -23,8 +23,6 @@ import type { AgentId } from '../core/types.js';
 import { complete, completionOnEnter } from './commands.js';
 import type { ChatController, PresentationSnapshot } from './controller.js';
 import { edit, editorWindow, type EditorState } from './editor.js';
-import { IdleAnimation, type SpriteFrame } from './sprites.js';
-import { theme, visibleText } from './theme.js';
 import { DrawingLink } from './drawing.js';
 import { boldRuns } from './message-text.js';
 import { FloorAnimation, type SpriteAnimations } from './sprites.js';
