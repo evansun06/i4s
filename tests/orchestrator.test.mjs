@@ -429,6 +429,29 @@ test('older rounds are folded into a summary; the log keeps everything', async (
   assert.match(summaries.at(-1).prompt, /PREVIOUS SUMMARY:\nsummary #/);
 });
 
+test('full history never condenses, so prompts keep every round', async () => {
+  const provider = fakeProvider((kind, agent) =>
+    agent === 'red' ? `SPEAK
+${'word '.repeat(40)}` : 'PASS',
+  );
+  const orchestrator = new Orchestrator({
+    agents: panel,
+    provider,
+    callLimit: 100,
+    compactAtTokens: 120,
+    keepTokens: 70,
+    history: 'full',
+  });
+  for (const text of ['one', 'two', 'three', 'four', 'five', 'six']) {
+    await orchestrator.submit(text);
+  }
+
+  assert.equal(provider.calls.filter((c) => c.kind === 'summary').length, 0);
+  const lastDraft = provider.calls.findLast((c) => c.kind === 'draft');
+  assert.match(lastDraft.prompt, /^USER: one/);
+  assert.equal(orchestrator.save().foldedUpTo, 0);
+});
+
 test('agent states are readable at any moment and report every change', async () => {
   const { orchestrator } = room(async (kind, agent) => {
     if (kind === 'review') return 'KEEP';
