@@ -23,6 +23,8 @@ const INVALID_REFERENCE = new Set([
   'relationship_reference',
   'redirect_reference',
   'reply_reference',
+  // A decision-history entry whose sequence does not match its cited message.
+  'decision_history',
   'edge_endpoint',
   'decision_option',
   'orphan_option',

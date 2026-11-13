@@ -106,7 +106,7 @@ test('the judge sees unlabeled responses and scores map back by config', async (
   const prompts = [];
   let replies = [
     'not json',
-    '{"response1":{"relevance":5,"specificity":4,"rebuttals":3},"response2":{"relevance":2,"specificity":2,"rebuttals":1},"rationale":"r"}',
+    '{"response1":{"relevance":5,"specificity":4,"rebuttals":3},"response2":{"relevance":2,"specificity":2,"rebuttals":1},"preferred":"1","weaknesses":{"response1":"w1","response2":"w2"},"rationale":"r"}',
   ];
   const provider = new MeasuredProvider(
     fakeFactory((request) => {
@@ -124,6 +124,8 @@ test('the judge sees unlabeled responses and scores map back by config', async (
     rebuttals: 3,
   });
   assert.equal(judgment.scores[judgment.order[1]].rebuttals, 1);
+  assert.equal(judgment.preferred, judgment.order[0]);
+  assert.equal(judgment.weaknesses[judgment.order[1]], 'w2');
 
   const markdown = summaryMarkdown({
     meta: { problems: ['fake'] },

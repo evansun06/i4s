@@ -10,6 +10,9 @@ export interface Judgment {
   /** Which configuration was shown as Response 1 and Response 2. */
   readonly order: readonly [DebateResult['config'], DebateResult['config']];
   readonly scores?: Readonly<Record<DebateResult['config'], Scores>>;
+  /** The judge's overall pick, independent of the summed scores. */
+  readonly preferred?: DebateResult['config'] | 'tie';
+  readonly weaknesses?: Readonly<Record<DebateResult['config'], string>>;
   readonly rationale?: string;
   readonly attempts: number;
   readonly error?: string;
@@ -36,20 +39,25 @@ ${[problem.prompt, ...problem.followUps].map((text, i) => `${i + 1}. ${text}`).j
 
 ${shown}
 
-Score each FINAL RECOMMENDATION from 1 (poor) to 5 (excellent) on:
-- relevance: answers what the user actually asked and respects every fact and constraint the user stated, including in later messages.
-- specificity: concrete and actionable, using this user's own numbers and situation rather than generic advice.
-- rebuttals: engages with the objections and counterarguments raised in its own discussion transcript, acknowledging the strongest ones and explaining why they do or do not change the advice.
-Use the whole scale. Equal scores are fine when the responses are equally good.
+Score each FINAL RECOMMENDATION from 1 to 5 on three criteria, using these anchors:
+- relevance: 5 = answers every question the user asked and respects every fact and constraint the user stated, including in later messages; 4 = one minor omission; 3 = ignores one stated constraint or part of a question; 2 = ignores several; 1 = largely off target.
+- specificity: 5 = every recommendation is tied to this user's own numbers and situation, with concrete steps (amounts, timelines, wording); 4 = mostly specific with a generic patch; 3 = an even mix of specific and generic advice; 2 = mostly generic; 1 = boilerplate that could apply to anyone.
+- rebuttals: 5 = identifies the strongest objections actually raised in its own discussion transcript and resolves each with a reason; 4 = engages the main objections but skims one; 3 = mentions objections superficially or misses a major one that was raised; 2 = barely acknowledges disagreement; 1 = ignores it.
+First write down each response's most important weakness. Reserve 5 for a criterion where the response has no meaningful weakness. Then say which response is better overall, or "tie" only if you genuinely cannot separate them.
 
 Reply with JSON only, no code fence:
-{"response1":{"relevance":n,"specificity":n,"rebuttals":n},"response2":{"relevance":n,"specificity":n,"rebuttals":n},"rationale":"two or three sentences comparing them"}`;
+{"weaknesses":{"response1":"...","response2":"..."},"response1":{"relevance":n,"specificity":n,"rebuttals":n},"response2":{"relevance":n,"specificity":n,"rebuttals":n},"preferred":"1" or "2" or "tie","rationale":"two or three sentences comparing them"}}`;
 }
 
 /** Returns undefined unless every score is a whole number from 1 to 5. */
-export function parseJudgment(
-  raw: string,
-): { scores: [Scores, Scores]; rationale: string } | undefined {
+export function parseJudgment(raw: string):
+  | {
+      scores: [Scores, Scores];
+      preferred: 1 | 2 | 'tie';
+      weaknesses: [string, string];
+      rationale: string;
+    }
+  | undefined {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   if (start < 0 || end < start) return undefined;
@@ -79,10 +87,16 @@ export function parseJudgment(
   };
   const first = read('response1');
   const second = read('response2');
-  if (!first || !second) return undefined;
+  const preferred = String(record.preferred).trim().toLowerCase();
+  if (!first || !second || !['1', '2', 'tie'].includes(preferred))
+    return undefined;
+  const weaknesses = (record.weaknesses ?? {}) as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === 'string' ? value : '');
   return {
     scores: [first, second],
-    rationale: typeof record.rationale === 'string' ? record.rationale : '',
+    preferred: preferred === 'tie' ? 'tie' : preferred === '1' ? 1 : 2,
+    weaknesses: [text(weaknesses.response1), text(weaknesses.response2)],
+    rationale: text(record.rationale),
   };
 }
 
@@ -133,6 +147,12 @@ export async function judge(
           [order[0]]: parsed.scores[0],
           [order[1]]: parsed.scores[1],
         } as Record<DebateResult['config'], Scores>,
+        preferred:
+          parsed.preferred === 'tie' ? 'tie' : order[parsed.preferred - 1]!,
+        weaknesses: {
+          [order[0]]: parsed.weaknesses[0],
+          [order[1]]: parsed.weaknesses[1],
+        } as Record<DebateResult['config'], string>,
         rationale: parsed.rationale,
         attempts,
         calls: [...provider.calls],

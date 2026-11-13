@@ -199,9 +199,19 @@ export function summaryMarkdown(results: EvalResults): string {
       if (winner === item.order[0]) firstShownWins += 1;
     }
   }
+  const picks = { full: 0, summary: 0, tie: 0 };
+  let firstShownPicked = 0;
+  for (const item of scored) {
+    if (!item.preferred) continue;
+    picks[item.preferred] += 1;
+    if (item.preferred === item.order[0]) firstShownPicked += 1;
+  }
   lines.push('## Head to head', '');
   lines.push(
-    `Of ${scored.length} judged problems (${judgments.length - scored.length} unjudged): full history scored higher on ${wins.full}, rolling summary on ${wins.summary}, tied on ${wins.tie}.`,
+    `Judge's overall pick: full history ${picks.full}, rolling summary ${picks.summary}, tie ${picks.tie}. The pick was the response shown first ${firstShownPicked} of ${picks.full + picks.summary} times.`,
+  );
+  lines.push(
+    `By summed scores, of ${scored.length} judged problems (${judgments.length - scored.length} unjudged): full history scored higher on ${wins.full}, rolling summary on ${wins.summary}, tied on ${wins.tie}.`,
     `When one response won, it was the one shown first ${firstShownWins} of ${wins.full + wins.summary} times (position-bias check).`,
     '',
   );

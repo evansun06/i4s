@@ -263,6 +263,10 @@ function transcriptMarkdown(
     scores
       ? `Judge: relevance ${scores.relevance}, specificity ${scores.specificity}, rebuttals ${scores.rebuttals}. Shown as response ${judgment.order.indexOf(run.config) + 1}.`
       : 'Judge: not scored.',
+    judgment?.weaknesses?.[run.config]
+      ? `Judge's main weakness: ${judgment.weaknesses[run.config]}`
+      : '',
+    judgment?.preferred ? `Judge's overall pick: ${judgment.preferred}.` : '',
     judgment?.rationale ? `Judge rationale: ${judgment.rationale}` : '',
     run.pipeline
       ? `Pipeline: ${run.pipeline.outcome}${run.pipeline.reasons.length ? ` (${run.pipeline.reasons.join(', ')})` : ''}.`
