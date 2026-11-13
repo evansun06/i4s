@@ -66,7 +66,15 @@ export async function runDebate(
   factory: ProviderFactory,
   settings: DebateSettings,
 ): Promise<DebateResult> {
-  const provider = new MeasuredProvider(factory, callerOf);
+  // A call that fails for good ends the debate; agents would only drop out.
+  let fail: (error: Error) => void = () => {};
+  const failed = {
+    promise: new Promise<never>((_, reject) => (fail = reject)),
+  };
+  failed.promise.catch(() => {});
+  const provider = new MeasuredProvider(factory, callerOf, (message) =>
+    fail(new Error(`A model call failed: ${message}`)),
+  );
   const orchestrator = new Orchestrator({
     agents: panel,
     provider,
@@ -92,14 +100,17 @@ export async function runDebate(
         text,
         snapshot.pendingQuestion ? { answer: false } : {},
       );
-      await withTimeout(round, settings.roundTimeoutMs);
+      await withTimeout(
+        Promise.race([round, failed.promise]),
+        settings.roundTimeoutMs,
+      );
     }
+    // Reads still finishing in the background can fail too.
+    await Promise.race([provider.settled(), failed.promise]);
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
   const wallClockMs = Math.round(performance.now() - started);
-  // Finish background usage reads before disposing aborts their streams.
-  if (error === undefined) await provider.settled();
   const saved = orchestrator.save();
   orchestrator.dispose();
   await provider.settled();

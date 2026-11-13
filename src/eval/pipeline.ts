@@ -160,6 +160,11 @@ export async function runPipeline(
     const step2 = result.step2Report
       ? stage(saved, 'step2', result.step2Report)
       : undefined;
+    // An HTTP failure says nothing about the graphs; report it as an error.
+    const failedRequest = requests.find(
+      (request) =>
+        request.httpStatus !== undefined && request.httpStatus !== 200,
+    );
     const passed = step1.passed && step2?.passed === true;
     const repaired = step1.repaired || step2?.repaired === true;
     const codes = passed
@@ -176,6 +181,9 @@ export async function runPipeline(
       ...(step2 && { step2 }),
       wallClockMs: Math.round(performance.now() - started),
       requests,
+      ...(failedRequest && {
+        error: `HTTP ${failedRequest.httpStatus} during ${failedRequest.kind}`,
+      }),
     };
   } catch (error) {
     return {

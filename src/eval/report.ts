@@ -33,14 +33,17 @@ const fixed = (value: number, digits = 0) =>
 
 /** Debate calls only; the synthesis and judge are reported separately. */
 export function debateTokens(run: RunRecord) {
-  const measured = run.calls.filter((call) => call.inputTokens !== undefined);
+  // A rate-limited attempt is retried; the retry is the call that counts.
+  const calls = run.calls.filter((call) => call.outcome !== 'rate-limited');
+  const measured = calls.filter((call) => call.inputTokens !== undefined);
   return {
-    calls: run.calls.length,
-    unmeasured: run.calls.length - measured.length,
+    calls: calls.length,
+    rateLimited: run.calls.length - calls.length,
+    unmeasured: calls.length - measured.length,
     inputPerCall: measured.map((call) => call.inputTokens!),
     input: sum(measured.map((call) => call.inputTokens!)),
     output: sum(measured.map((call) => call.outputTokens ?? 0)),
-    summaryCalls: run.calls.filter((call) => call.kind === 'summary').length,
+    summaryCalls: calls.filter((call) => call.kind === 'summary').length,
   };
 }
 
@@ -148,6 +151,9 @@ export function summaryMarkdown(results: EvalResults): string {
   metric('Wall-clock per debate, s (mean)', (selected) =>
     fixed(mean(completed(selected).map((run) => run.wallClockMs / 1000)), 1),
   );
+  metric('Rate-limited attempts (retried)', (selected) =>
+    String(sum(selected.map((run) => debateTokens(run).rateLimited))),
+  );
   metric('Calls without reported usage', (selected) =>
     String(sum(selected.map((run) => debateTokens(run).unmeasured))),
   );
@@ -181,9 +187,14 @@ export function summaryMarkdown(results: EvalResults): string {
   ] as const)
     metric(`Pipeline: ${outcome}`, (selected) =>
       String(
-        selected.filter((run) => run.pipeline?.outcome === outcome).length,
+        selected.filter(
+          (run) => !run.pipeline?.error && run.pipeline?.outcome === outcome,
+        ).length,
       ),
     );
+  metric('Pipeline: not measured (request failed)', (selected) =>
+    String(selected.filter((run) => run.pipeline?.error).length),
+  );
   lines.push('');
 
   const scored = judgments.filter((item) => item.scores);

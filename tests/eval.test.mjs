@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { panel } from '../dist/agents/panel.js';
+import { RateLimitError } from '../dist/providers/model.js';
 import { runDebate } from '../dist/eval/debate.js';
 import { judge, parseJudgment, seededRandom } from '../dist/eval/judge.js';
 import { MeasuredProvider } from '../dist/eval/measure.js';
@@ -152,4 +153,43 @@ test('pipeline error codes map to reported reasons', () => {
   assert.equal(categorize('approval_fidelity'), 'unsupported-commitment');
   assert.equal(categorize('step2_generation'), 'schema-or-generation');
   assert.equal(categorize('node_title'), 'other');
+});
+
+test('a fatal provider error ends the debate instead of dropping agents', async () => {
+  let calls = 0;
+  const result = await runDebate(
+    problem,
+    'full',
+    fakeFactory(() => {
+      calls += 1;
+      throw new RateLimitError('You have no credits remaining.');
+    }),
+    settings,
+  );
+  assert.equal(result.completed, false);
+  assert.match(result.error, /no credits/);
+  assert.equal(result.agentTurns, 0);
+  // One round's drafts at most, not a whole debate of failures.
+  assert.ok(calls <= 4, `made ${calls} calls`);
+});
+
+test('a transient rate limit is retried and recorded as an attempt', async () => {
+  let limited = false;
+  const result = await runDebate(
+    problem,
+    'full',
+    fakeFactory((request) => {
+      if (!limited && agentOf(request) === 'red') {
+        limited = true;
+        throw new RateLimitError('Slow down.', 0.01);
+      }
+      return script(request);
+    }),
+    settings,
+  );
+  assert.equal(result.completed, true);
+  assert.equal(
+    result.calls.filter((call) => call.outcome === 'rate-limited').length,
+    1,
+  );
 });
