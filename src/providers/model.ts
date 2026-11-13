@@ -9,6 +9,19 @@ export interface ModelRequest {
   readonly effort?: 'high';
 }
 
+/** Token counts the provider reported for one completed call. */
+export interface ModelUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** Input tokens billed at a cached rate, when the provider says. */
+  readonly cachedInputTokens?: number;
+  /** Output tokens spent on hidden reasoning, when the provider says. */
+  readonly reasoningTokens?: number;
+}
+
+/** Opt-in measurement; adapters ask for usage data only when it is set. */
+export type UsageListener = (request: ModelRequest, usage: ModelUsage) => void;
+
 /** Thrown before any output when the provider asks us to slow down. */
 export class RateLimitError extends Error {
   constructor(
