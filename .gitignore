@@ -12,3 +12,5 @@ i4s-exports/
 .vscode/*
 .idle-preview/
 /local-sessions
+# Pipeline artifacts from evaluation runs; results.json keeps the outcomes.
+/evals/results/*/artifacts/

@@ -56,7 +56,7 @@ function questionRule(context: DiscussionContext): string {
 
 // Summary first, then an append-only transcript: consecutive calls share a
 // long identical prefix, which providers can bill at a cached rate.
-function render(context: DiscussionContext, markerAt?: number): string {
+export function render(context: DiscussionContext, markerAt?: number): string {
   const { summary, recent, answered } = context;
   const messages =
     markerAt === undefined

@@ -431,8 +431,7 @@ test('older rounds are folded into a summary; the log keeps everything', async (
 
 test('full history never condenses, so prompts keep every round', async () => {
   const provider = fakeProvider((kind, agent) =>
-    agent === 'red' ? `SPEAK
-${'word '.repeat(40)}` : 'PASS',
+    agent === 'red' ? `SPEAK\n${'word '.repeat(40)}` : 'PASS',
   );
   const orchestrator = new Orchestrator({
     agents: panel,

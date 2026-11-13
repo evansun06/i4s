@@ -49,7 +49,8 @@
     "prepack": "npm run build",
     "demo": "tsx src/cli.tsx --plain",
     "pipeline": "tsx src/drawing/excalidraw/cli.ts",
-    "audit-run": "tsx src/drawing/excalidraw/auditRun.ts"
+    "audit-run": "tsx src/drawing/excalidraw/auditRun.ts",
+    "eval": "tsx src/eval/cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
