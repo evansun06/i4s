@@ -155,6 +155,91 @@ Run `idiots --help` for the full list.
 - **Discussions** are saved after every round as JSON files in `~/.the-idiots/sessions/`, so you can continue them later. Delete a file to forget a discussion.
 - **Model calls** cost money on your provider account. Each session has a call limit (`--call-limit`, `/budget`) that the app never exceeds.
 
+## Evaluation
+
+Long discussions don't send the whole conversation to the model. Once recent
+messages pass a size limit, older rounds fold into a rolling summary. The
+evaluation asks two questions. Does that summary cost answer quality compared
+with full history? And how reliable is the `/draw` extraction pipeline?
+
+**Method.** 15 fixed problems (`evals/problems.json`): 3 career, 4 technical,
+4 planning, 4 everyday. Each runs as a four-round debate (the prompt plus
+three scripted follow-ups), once with **full history** and once with **rolling
+summaries**. The app folds at about 8k tokens, which a four-round debate
+never reaches, so the evaluation folds at 1,500 tokens and keeps 600 verbatim.
+That way the summary actually runs, about once per debate.
+
+- Every call's input and output tokens are logged, as reported by the
+  provider, with agent turns and wall-clock time.
+- A synthesis call writes the panel's final recommendation from the same
+  context the agents saw.
+- A judge model sees both recommendations and their transcripts, unlabeled,
+  in seeded random order. It scores each from 1 to 5 against anchored levels
+  on relevance, specificity and engagement with rebuttals, names each
+  response's main weakness, and picks one overall.
+- The `/draw` pipeline runs on each debate. Its graphs are recorded as
+  passed first try, passed after repair, or rejected, with the reason.
+
+**Results** (`evals/results/2026-11-13T22-38-11Z/`; debates and judge
+`gpt-5.5`, pipeline `gpt-6-luna`; all 30 debates completed and judged):
+
+| Metric                                        |       Full history |    Rolling summary |
+| --------------------------------------------- | -----------------: | -----------------: |
+| Judge total, mean (3–15)                      |              13.73 |              13.80 |
+| Relevance / specificity / rebuttals           | 4.93 / 4.53 / 4.27 | 4.80 / 4.47 / 4.53 |
+| Judge's overall pick                          |                  7 |                  8 |
+| Input tokens per call, mean                   |              1,750 |              1,729 |
+| Total tokens per debate, mean                 |             77,573 |             79,334 |
+| Model calls per debate, mean                  |               39.1 |               39.9 |
+| Agent turns per debate, mean                  |               15.3 |               15.4 |
+| Pipeline: first try / after repair / rejected |          5 / 8 / 2 |          8 / 6 / 1 |
+
+**Findings.**
+
+- Quality is indistinguishable at this length. Means differ by 0.07 out of
+  15, and the judge's picks split 7–8.
+- Summaries don't save tokens in four-round debates. Input per call is about
+  1% lower, but the summary call itself and slightly longer debates make
+  total tokens about 2% higher. Any saving needs longer discussions than
+  these.
+- The one large gap (`plan-learning-spanish`, summary, 10/15 versus 13/15)
+  wasn't lost information. The summary kept every user constraint, but the
+  final answer addressed only the last question. Summaries can lose emphasis
+  even when they keep content. See
+  [the failure analysis](evals/results/2026-11-13T22-38-11Z/failure-analysis.md).
+- The pipeline produced valid graphs for 27 of 30 debates, 14 of them after
+  repair. Nearly every repair or rejection includes `decision_history` (a
+  history entry citing the wrong message), so that is the check most worth
+  improving.
+
+**Limitations.**
+
+- 15 problems, one run each: differences under about a point are noise.
+- The judge is the same model as the debaters. That affects both configs
+  equally, but the absolute scores are not an objective measure. The answer
+  shown first won 8 of the 13 non-tied comparisons by score, a mild position
+  bias.
+- Scripted follow-ups never answer advisors' questions, unlike real users.
+- The summary threshold is far below the app's default, so the summary cost
+  shown here is a harsher case than normal use.
+- Wall-clock times overlap: problems ran 3 at a time, both configs at once.
+- The run started at `13de313` and was resumed at `43a66a6` after an
+  out-of-credit stop. The resume commit only changed error handling, not
+  debate behaviour.
+
+**Running it.** It needs an OpenAI key and spends real API credit. Automated
+tests never call it.
+
+```sh
+npm run eval                                   # all problems, both configs
+npm run eval -- --concurrency 3                # faster
+npm run eval -- --resume evals/results/<run>   # rerun unfinished problems
+npm run eval -- --help                         # models, thresholds, seed
+```
+
+Each run writes `results.json` (raw data), `summary.md` (tables) and
+`transcripts/` to `evals/results/<timestamp>/`.
+
 ## Development
 
 See [SETUP.md](SETUP.md) for working on The Idiots itself.
