@@ -43,16 +43,17 @@ Use a true-color terminal at least 76 columns wide for the character sprites. Th
 
 ## Development and verification
 
-| Command              | Purpose                                                    |
-| -------------------- | ---------------------------------------------------------- |
-| `npm run dev`        | Start the working TUI                                      |
-| `npm run dev:watch`  | Restart on edits; resets in-memory state                   |
-| `npm run demo`       | Run the original plain transcript                          |
-| `npm run build`      | Compile into `dist/` and copy runtime assets               |
-| `npm start`          | Run the compiled TUI                                       |
-| `npm test`           | Build and run deterministic tests with fake providers      |
-| `npm run check`      | Typecheck, lint, format check, and tests                   |
-| `npm pack --dry-run` | Inspect distributable files, including sprites and palette |
+| Command              | Purpose                                                                    |
+| -------------------- | -------------------------------------------------------------------------- |
+| `npm run dev`        | Start the working TUI                                                      |
+| `npm run dev:watch`  | Restart on edits; resets in-memory state                                   |
+| `npm run demo`       | Run the original plain transcript                                          |
+| `npm run build`      | Compile into `dist/` and copy runtime assets                               |
+| `npm start`          | Run the compiled TUI                                                       |
+| `npm test`           | Build and run deterministic tests with fake providers                      |
+| `npm run check`      | Typecheck, lint, format check, and tests                                   |
+| `npm pack --dry-run` | Inspect distributable files, including sprites and palette                 |
+| `npm run eval`       | Real-model evaluation; spends API credits ([README](README.md#evaluation)) |
 
 For an interactive test without credentials or API spending:
 
@@ -74,6 +75,7 @@ This fixture uses a local fake provider and does not save sessions. Send `@ruby 
 - `src/providers/` implements streamed model calls and cancellation.
 - `src/storage/` handles sessions and credentials.
 - `src/drawing/` runs `/draw`: `pipeline.ts` starts the Excalidraw pipeline in `src/drawing/excalidraw/` as a child process with the session's OpenAI key; the rest serves the edit link. `npm run pipeline` runs it standalone ([docs/drawing-pipeline.md](docs/drawing-pipeline.md)); its tests are `tests/pipeline-*.test.mjs`.
+- `src/eval/` is the evaluation harness behind `npm run eval`. It drives the same orchestrator with real models, so it never runs in `npm test`; `tests/eval.test.mjs` covers it with fake providers. Problems live in `evals/problems.json` and results in `evals/results/`.
 - `src/assets/` contains hand-drawn sources, PNG/JSON exports, and the palette. Builds copy only runtime PNGs, JSON, and the palette into `dist/assets/`.
 
 The product designs in `docs/` describe the longer-term continuous discussion room. Autonomous continuation, a structured shared brief, proposal panels, and additional character animations are still future work.

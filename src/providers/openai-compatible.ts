@@ -2,6 +2,7 @@ import {
   RateLimitError,
   type ModelProvider,
   type ModelRequest,
+  type UsageListener,
 } from './model.js';
 
 export interface OpenAICompatibleOptions {
@@ -14,6 +15,8 @@ export interface OpenAICompatibleOptions {
   readonly extraBody?: Readonly<Record<string, unknown>>;
   /** Fields that ask this provider for high reasoning effort. */
   readonly highEffort?: Readonly<Record<string, unknown>>;
+  /** Reports each call's token counts; requests usage in the stream. */
+  readonly onUsage?: UsageListener;
 }
 
 /** Streams `/chat/completions`, which most providers and local servers accept. */
@@ -25,8 +28,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
   }
 
   async *generate(request: ModelRequest): AsyncIterable<string> {
-    const { baseUrl, apiKey, models, maxTokensField, extraBody, highEffort } =
-      this.#options;
+    const {
+      baseUrl,
+      apiKey,
+      models,
+      maxTokensField,
+      extraBody,
+      highEffort,
+      onUsage,
+    } = this.#options;
     const response = await fetch(
       `${baseUrl.replace(/\/$/, '')}/chat/completions`,
       {
@@ -46,6 +56,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           ],
           ...extraBody,
           ...(request.effort === 'high' && highEffort),
+          ...(onUsage && { stream_options: { include_usage: true } }),
         }),
       },
     );
@@ -70,12 +81,32 @@ export class OpenAICompatibleProvider implements ModelProvider {
         if (payload === '[DONE]') return;
         const chunk = JSON.parse(payload) as {
           choices?: { delta?: { content?: string | null } }[];
+          usage?: StreamUsage | null;
         };
         const text = chunk.choices?.[0]?.delta?.content;
         if (text) yield text;
+        if (onUsage && chunk.usage) onUsage(request, readUsage(chunk.usage));
       }
     }
   }
+}
+
+interface StreamUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number } | null;
+  completion_tokens_details?: { reasoning_tokens?: number } | null;
+}
+
+function readUsage(usage: StreamUsage) {
+  const cached = usage.prompt_tokens_details?.cached_tokens;
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens;
+  return {
+    inputTokens: usage.prompt_tokens ?? 0,
+    outputTokens: usage.completion_tokens ?? 0,
+    ...(cached !== undefined && { cachedInputTokens: cached }),
+    ...(reasoning !== undefined && { reasoningTokens: reasoning }),
+  };
 }
 
 /** From the Retry-After header, or Gemini's "Please retry in 15.8s". */

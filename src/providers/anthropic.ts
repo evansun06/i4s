@@ -3,21 +3,26 @@ import {
   RateLimitError,
   type ModelProvider,
   type ModelRequest,
+  type UsageListener,
 } from './model.js';
 
 export interface AnthropicOptions {
   readonly apiKey: string;
   readonly models: Readonly<Record<ModelRequest['kind'], string>>;
+  /** Reports each call's token counts. */
+  readonly onUsage?: UsageListener;
 }
 
 /** Claude through the official SDK; the orchestrator owns retry scheduling. */
 export class AnthropicProvider implements ModelProvider {
   readonly #client: Anthropic;
   readonly #models: AnthropicOptions['models'];
+  readonly #onUsage: UsageListener | undefined;
 
   constructor(options: AnthropicOptions) {
     this.#client = new Anthropic({ apiKey: options.apiKey, maxRetries: 0 });
     this.#models = options.models;
+    this.#onUsage = options.onUsage;
   }
 
   async *generate(request: ModelRequest): AsyncIterable<string> {
@@ -50,6 +55,16 @@ export class AnthropicProvider implements ModelProvider {
         }
       }
       const message = await stream.finalMessage();
+      const { usage } = message;
+      // Anthropic counts cached input separately from input_tokens.
+      const cached =
+        (usage.cache_read_input_tokens ?? 0) +
+        (usage.cache_creation_input_tokens ?? 0);
+      this.#onUsage?.(request, {
+        inputTokens: usage.input_tokens + cached,
+        outputTokens: usage.output_tokens,
+        cachedInputTokens: usage.cache_read_input_tokens ?? 0,
+      });
       if (message.stop_reason === 'refusal') {
         throw new Error(`${model} declined to respond to this message.`);
       }

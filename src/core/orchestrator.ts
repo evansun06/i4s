@@ -47,6 +47,11 @@ export interface OrchestratorOptions {
   readonly compactAtTokens?: number;
   /** Rounds kept word for word after condensing, by size. */
   readonly keepTokens?: number;
+  /**
+   * `summary` (the default) condenses older rounds; `full` never does, so
+   * every prompt carries the whole log. Used to compare the two in evals.
+   */
+  readonly history?: 'summary' | 'full';
   /** A discussion saved with `save()`, to continue where it left off. */
   readonly restore?: SavedDiscussion;
 }
@@ -149,6 +154,7 @@ export class Orchestrator {
   #callLimit: number;
   readonly #compactAtTokens: number;
   readonly #keepTokens: number;
+  readonly #history: 'summary' | 'full';
   /** Older rounds live here instead of in prompts; the log keeps everything. */
   #summary = '';
   #foldedUpTo = 0;
@@ -160,6 +166,7 @@ export class Orchestrator {
     this.#callLimit = options.callLimit;
     this.#compactAtTokens = options.compactAtTokens ?? 8000;
     this.#keepTokens = options.keepTokens ?? 3000;
+    this.#history = options.history ?? 'summary';
     for (const agent of this.#agents) {
       this.#agentStates.set(agent.id, { activity: 'listening' });
       this.#temperatures.set(
@@ -847,6 +854,7 @@ export class Orchestrator {
     // Maintenance must not hold a round open while the user needs the floor.
     // Leave older messages intact and try again at a later round boundary.
     if (
+      this.#history === 'full' ||
       this.#disposed ||
       this.#mode !== 'running' ||
       this.#pendingQuestion ||

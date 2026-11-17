@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "description": "Fixed evaluation problems. Each debate is the prompt followed by three scripted user follow-ups, so older rounds can be condensed into a rolling summary.",
+  "problems": [
+    {
+      "id": "career-startup-offer",
+      "category": "career",
+      "prompt": "I'm a backend engineer at a large bank earning $165k with good benefits. A 12-person fintech startup offered me $140k plus 0.4% equity to be their second backend hire. Should I take it?",
+      "followUps": [
+        "I have about 8 months of expenses saved and no dependents, but I'm planning to buy a condo in two years.",
+        "The startup raised a $6M seed round 10 months ago. They haven't told me their runway. What should I ask them before deciding?",
+        "Say they have 14 months of runway and won't budge on salary. Give me your final call and what would change it."
+      ]
+    },
+    {
+      "id": "career-manager-track",
+      "category": "career",
+      "prompt": "My director wants me to move from senior engineer to engineering manager for my team of 6. I like coding but I'm curious about management. How should I decide?",
+      "followUps": [
+        "The company says I could switch back to IC within a year if it doesn't work out, but nobody has actually done that here.",
+        "Two people on the team are senior to me in tenure, and one of them also wanted the role.",
+        "I have to answer by Friday. What exactly should I say to my director?"
+      ]
+    },
+    {
+      "id": "career-grad-school",
+      "category": "career",
+      "prompt": "I'm 27, working as a data analyst. Should I quit to do a full-time two-year master's in machine learning, which costs $70k, or keep working and learn on the side?",
+      "followUps": [
+        "My employer offers $5k a year in tuition reimbursement for part-time programs, with a one-year stay commitment after each payment.",
+        "My goal is to be doing ML engineering work, not research, within three years.",
+        "One of you is overvaluing credentials and one is undervaluing them. Settle it: what's the plan for the next 12 months?"
+      ]
+    },
+    {
+      "id": "tech-monolith-split",
+      "category": "technical",
+      "prompt": "Our Rails monolith serves 40k daily users and 8 engineers work in it. Deploys take 45 minutes and teams step on each other. Leadership wants to move to microservices. Is that the right fix?",
+      "followUps": [
+        "About 70% of the deploy time is the test suite. Most merge conflicts are in the billing and notifications code.",
+        "We have no dedicated platform or SRE people. One engineer knows Kubernetes.",
+        "Leadership needs a one-quarter plan. What do we do in the next 90 days, in order?"
+      ]
+    },
+    {
+      "id": "tech-postgres-vs-dynamo",
+      "category": "technical",
+      "prompt": "We're building an order-tracking service expected to hit 5k writes per second at peak. Should we use Postgres or DynamoDB?",
+      "followUps": [
+        "Queries are mostly by order ID, but customer support needs to search by email, date range, and status.",
+        "The team knows Postgres well and has never run DynamoDB in production. We're already on AWS.",
+        "Peak is only during two sales events a year; normal load is about 300 writes per second. Does that change your answer?"
+      ]
+    },
+    {
+      "id": "tech-mobile-framework",
+      "category": "technical",
+      "prompt": "We have a web team that knows React and TypeScript. We need iOS and Android apps for a habit-tracking product. React Native, Flutter, or two native apps?",
+      "followUps": [
+        "The app needs offline support, home-screen widgets, and HealthKit/Google Fit integration.",
+        "We can hire at most one more engineer this year.",
+        "Investors want the iOS app in four months. Which approach, and what do we cut to make it?"
+      ]
+    },
+    {
+      "id": "tech-build-vs-buy-auth",
+      "category": "technical",
+      "prompt": "For our B2B SaaS, should we build our own authentication or use a provider like Auth0 or Clerk?",
+      "followUps": [
+        "Enterprise customers are starting to ask for SAML SSO and SCIM provisioning.",
+        "Auth0's quote for our expected 50k monthly active users is about $2,400/month. Our total infrastructure bill is $6k/month.",
+        "Our CTO worries about vendor lock-in above everything else. How do we address that concretely?"
+      ]
+    },
+    {
+      "id": "plan-product-launch",
+      "category": "planning",
+      "prompt": "I'm launching a paid newsletter about personal finance for nurses. I have 1,200 free subscribers. Plan the first 3 months of the paid launch.",
+      "followUps": [
+        "I can spend about 10 hours a week on it while working full time as a nurse.",
+        "I was thinking $8/month. Some readers said they'd pay but I haven't tested it.",
+        "What are the two numbers I should watch each week, and what would make me stop or pivot?"
+      ]
+    },
+    {
+      "id": "plan-team-offsite",
+      "category": "planning",
+      "prompt": "Plan a two-day offsite for a remote team of 14 people across 4 time zones, with a $20k budget. The goal is to reset after a rough reorg.",
+      "followUps": [
+        "Three people have young kids and can't be away overnight more than once. Two people are very introverted.",
+        "My VP wants a full day of roadmap planning. The team wants time to just reconnect.",
+        "Give me the final agenda for both days, hour by hour."
+      ]
+    },
+    {
+      "id": "plan-migration-cutover",
+      "category": "planning",
+      "prompt": "We need to move 2TB of customer data from a self-hosted MySQL to a managed cloud database with under 15 minutes of downtime. Plan the migration.",
+      "followUps": [
+        "Writes come in 24/7 but drop to about 50 per second between 2 and 5 a.m.",
+        "We've never done a rehearsal migration and the legal team requires that no data be lost.",
+        "What is the rollback plan if we find problems an hour after cutover?"
+      ]
+    },
+    {
+      "id": "plan-learning-spanish",
+      "category": "planning",
+      "prompt": "I want to be conversational in Spanish within 9 months for a move to Mexico City. I'm a complete beginner. Make me a plan.",
+      "followUps": [
+        "I can do 45 minutes on weekdays and 2 hours on weekends. I've failed with Duolingo twice because I got bored.",
+        "My budget for classes or tutors is about $150 a month.",
+        "How will I know at month 3 and month 6 whether I'm on track?"
+      ]
+    },
+    {
+      "id": "everyday-car",
+      "category": "everyday",
+      "prompt": "My 2012 Honda Civic has 160k miles and needs a $2,800 transmission repair. Should I fix it or buy another car?",
+      "followUps": [
+        "Otherwise it runs fine. I drive about 9k miles a year, mostly commuting 15 miles each way.",
+        "I have $12k saved, and a used 2019 Civic around me costs about $19k.",
+        "My partner thinks we should get an EV now. Is that a good idea or a distraction?"
+      ]
+    },
+    {
+      "id": "everyday-roommate",
+      "category": "everyday",
+      "prompt": "My roommate keeps having their partner stay over 4-5 nights a week. The partner doesn't pay rent and uses utilities. How should I handle it?",
+      "followUps": [
+        "We're on a joint lease that ends in 7 months. I otherwise like my roommate.",
+        "I brought it up once casually and they said 'they're barely here' and changed the subject.",
+        "Write out what I should actually say, and what I'll do if they don't agree."
+      ]
+    },
+    {
+      "id": "everyday-wedding",
+      "category": "everyday",
+      "prompt": "My best friend's destination wedding in Portugal would cost me about $3,500 all in. I'm trying to pay off $9k of credit card debt. Should I go?",
+      "followUps": [
+        "I'm a bridesmaid. She said she'd understand if I can't come, but I think she'd be hurt.",
+        "The card's interest rate is 24%. I pay about $600 a month toward it.",
+        "If I go, how do I do it as cheaply as possible? If I don't, how do I tell her?"
+      ]
+    },
+    {
+      "id": "everyday-dog",
+      "category": "everyday",
+      "prompt": "We're thinking of adopting a dog. We both work hybrid, three days in the office, in a one-bedroom apartment. Is now the right time?",
+      "followUps": [
+        "There's a dog daycare nearby for $45 a day. Our building allows dogs under 40 pounds.",
+        "We might move to a bigger place or another city in about a year, but it's not certain.",
+        "If we go ahead, what kind of dog and what should the first month look like?"
+      ]
+    }
+  ]
+}
