@@ -10,6 +10,97 @@ An exchange yields after six public messages, when everyone passes, when the use
 
 Playback gates both live streams and held replies. Ink queues user messages and raises a hand on submission. Ctrl+R also reserves the next turn without submitting or clearing the editor; the current displayed message finishes, then the user has the floor. Raising a hand takes precedence over outstanding reviews. Paused input stays queued until resume; Ctrl+R does not resume a paused room. Plain mode retains Enter to raise a hand. The restored question prompts ask for `QUESTION:` when the answer would change the advice and discourage consecutive questions. The engine uses that marker to create a pending question; both clients hide the marker during streaming and when replaying saved messages. The footer identifies who is waiting without repeating the question.
 
+## Inspecting the live room
+
+The current interfaces are defined in [`src/core/types.ts`](../src/core/types.ts)
+and implemented by [`Orchestrator`](../src/core/orchestrator.ts).
+`orchestrator.agentState('blue')` returns `{ activity }` and throws for an unknown
+agent ID. The engine replaces state objects on transitions; read again to observe
+the next state. Activities are `listening`, `thinking`, `deliberating`, `waiting`,
+`reviewing`, `speaking`, `has-question`, and `passing`.
+
+`orchestrator.snapshot()` returns the whole room, cached until something changes:
+
+| Field                     | Meaning                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| `mode`                    | `initial-prompt`, `running`, `awaiting-user`, or `paused`                                   |
+| `agents`                  | Each agent's activity, keyed by color ID                                                    |
+| `speaking`                | Optional `{ agent, text }` for the current streamed or held reply                           |
+| `queue`                   | Agents with finished drafts, in speaking order                                              |
+| `pendingQuestion`         | Optional `{ agent, eventId, question }` waiting for the user                                |
+| `lastTurn`                | Optional `{ agent, result }`; result is `spoke`, `asked`, `passed`, `withdrew`, or `failed` |
+| `callsUsed`, `callLimit`  | Usage against the hard model-call budget                                                    |
+| `notice`                  | Optional status or error text                                                               |
+| `mentioned`, `handRaised` | Who was addressed and whether the user requested the floor                                  |
+| `temperatures`, `angry`   | Per-agent boldness and the room's comedy mode                                               |
+
+Subscribe to all room changes, including streamed text, with
+`orchestrator.subscribe(listener)`. For animation transitions, use
+`orchestrator.subscribeAgents((id, state, previous) => { ... })`: it fires only
+when an agent's activity changes. Both return an unsubscribe function. For direct
+React integration, wrap the methods so they retain their instance context:
+
+```tsx
+const room = useSyncExternalStore(
+  (listener) => orchestrator.subscribe(listener),
+  () => orchestrator.snapshot(),
+);
+```
+
+The TUI subscribes through its chat controller, which also handles paced playback.
+State-driven animation runs locally and needs no model calls.
+
+## Shared conversation log
+
+The append-only [`EventBus`](../src/core/events.ts) is exposed as
+`orchestrator.bus`. Agents read this shared history when building model prompts;
+listening itself makes no calls. A separate `new EventBus()` starts an independent,
+empty log and does not feed the live discussion.
+
+`bus.log` is a `readonly LogEvent[]` in speaking order. Treat it as read-only;
+copy it when a fixed snapshot is needed. `bus.subscribe((event) => { ... })`
+reports each append and returns an unsubscribe function.
+`JSON.stringify(bus.log, null, 2)` exports the messages directly.
+
+| Field     | Message kinds       | Meaning                                                           |
+| --------- | ------------------- | ----------------------------------------------------------------- |
+| `id`      | Both                | Zero-based position, assigned by EventBus                         |
+| `kind`    | Both                | `user-message` or `agent-message`                                 |
+| `text`    | Both                | Full committed message; blocking questions use a `QUESTION:` line |
+| `agent`   | Agent only          | `red`, `yellow`, `green`, or `blue`                               |
+| `replyTo` | User only, optional | Agent-message ID whose question this answers                      |
+
+```json
+[
+  {
+    "id": 0,
+    "kind": "user-message",
+    "text": "I want to start a coffee subscription."
+  },
+  {
+    "id": 1,
+    "kind": "agent-message",
+    "agent": "blue",
+    "text": "Start with a preorder test.\nQUESTION: What is your monthly budget?"
+  },
+  {
+    "id": 2,
+    "kind": "user-message",
+    "text": "About $5k a month.",
+    "replyTo": 1
+  }
+]
+```
+
+An agent message joins the log only after it finishes speaking. For text still
+being delivered, read `snapshot().speaking`; for the question currently awaiting
+an answer, read `snapshot().pendingQuestion`. To find historical question markers,
+filter agent messages with `findQuestion` from
+[`src/agents/prompts.ts`](../src/agents/prompts.ts). The UI hides the marker while
+the saved log retains it.
+
+## Earlier design exploration
+
 The diagrams and proposal/brief machinery below record the earlier continuous-room design. They are future exploration where they differ from this bounded group-chat implementation; mandatory brief consensus and autonomous continuation are not prerequisites for chatting.
 
 ## Room states

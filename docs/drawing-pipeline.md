@@ -1,17 +1,17 @@
 # Isolated conversation-to-planning pipeline
 
 The architecture and technical source of truth is
-[`../docs/excalidraw.md`](../docs/excalidraw.md) for Steps 1–2 and
-[`../docs/step3.md`](../docs/step3.md) for Excalidraw generation. This component
-implements Steps 1–3 and runs independently of the existing TUI. Changes are contained in
-this directory; it imports no application modules. The application now invokes
+[`excalidraw.md`](excalidraw.md) for Steps 1–2 and
+[`step3.md`](step3.md) for Excalidraw generation. This component
+implements Steps 1–3 and runs independently of the existing TUI. Its implementation
+lives in `src/drawing/excalidraw/`; it imports no application modules. The application invokes
 this component as a subprocess for `/draw`; React/runtime dependencies stay separate.
 The readability extension adds presentation design after validated Step 2.
 The final review is removed; output is just the two maps. The latest user-requested
-fast-map amendment is recorded in `PRESENTATION.md`: decision projection is now
+fast-map amendment is recorded in [the presentation guide](drawing-presentation.md#fast-map-amendment): decision projection is now
 deterministic in the CLI and relationship-category checks are advisory.
 The current display contract follows the user's simplified-map amendment in
-[`PRESENTATION.md`](PRESENTATION.md), superseding the earlier exhaustive canvas.
+[the presentation guide](drawing-presentation.md), superseding the earlier exhaustive canvas.
 
 ## Run
 
@@ -30,7 +30,7 @@ and makes zero calls.
 There is no fixture-replay or prewritten-output fallback.
 
 The default input is `tests/pipeline/fixtures/conversation.seed.json`, following the EventBus
-format in `jacob/log_usage.txt`: `id`, `kind`, `text`, agent identity, and
+format in [the shared conversation log reference](architecture.md#shared-conversation-log): `id`, `kind`, `text`, agent identity, and
 optional user `replyTo`. You can also ingest the document's native
 `ConversationInput` envelope with attributed, ordered messages:
 
