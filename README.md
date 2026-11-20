@@ -76,6 +76,25 @@ Then the lobby opens: start a new discussion or pick a saved one with ↑↓ and
 
 The reading speed shows in the top bar. Terminals never pass the Command key through to apps, so the speed keys use Ctrl (or Alt) on every platform. While the app is open it handles the mouse wheel itself, so in most terminals hold Shift to select text with the mouse.
 
+### Agent boldness
+
+Boldness changes how strongly each advisor expresses its personality through a
+prompt instruction; it does not change the provider's sampling temperature.
+At 0 the voice is generic, at 0.5 it is normal (no extra style instruction),
+and at 1 the personality is at full volume.
+
+```text
+/temp                         Show everyone's settings
+/temp 0.8                     Set everyone to 0.8
+/temp yellow 0.9              Set Lemon to 0.9 (also /temp @yellow 0.9)
+/temp yellow=0.9, blue=0.2     Set multiple advisors
+/temp reset                   Reset everyone to 0.5
+```
+
+Changes affect the next reply and are saved with the discussion. At startup,
+`--temperature 0.7` sets everyone, or `--temperature "yellow=0.9,blue=0.2"`
+sets individual advisors; these explicit settings override their saved values.
+
 ## Drawing maps
 
 Drawing ships with the app; there is nothing extra to install. It uses OpenAI

@@ -12,6 +12,11 @@ npm ci
 npm run dev
 ```
 
+If `npm ci` reports `ERESOLVE` for React 19 and React DOM 18, use
+`npm ci --legacy-peer-deps`. The current lockfile contains that peer mismatch;
+this workaround installs the locked versions without changing the lockfile.
+It omits peer-only packages, so the browser import test still requires React DOM.
+
 With no API key yet, a welcome screen asks you to paste one; the provider is detected from the key (or asked for, when it can't be), and the key is shown only as dots. The lobby then shows the title, the four characters idling (on terminals at least 76×34), and a list to start a new discussion or resume a saved one: Up/Down and Enter choose, Escape or Ctrl+C quits. Ctrl+K opens the key list: Enter chooses the key new chats use, Backspace removes a saved key, "+ Add a key" pastes another, and Escape returns. (Ctrl+M can't be used: terminals send it as Enter.) `/lobby` saves the discussion and returns there, with the list refreshed. `--provider` makes chats use that provider's key, asking for it if missing. `--plain` skips the lobby and keeps the original prompts. Provider environment variables are supported; keys entered interactively are stored in the OS keychain. Session files and non-secret preferences live under `~/.the-idiots/`, outside the repository.
 
 The default interface shows the conversation, followed by a centered row of Ruby, Lemon, Jade, and Bleu above the input bar. State labels describe their activity. The artwork currently has idle animations only; those run locally at independent random intervals. The ball beside the displayed speaker pulses as text is revealed.
@@ -67,6 +72,9 @@ This fixture uses a local fake provider and does not save sessions. Send `@ruby 
 `package-lock.json` is committed with dependency changes. Use `npm ci` for fresh checkouts and `npm install` for intentional dependency changes; do not edit the lockfile by hand. `string-width` is a direct dependency for Unicode-aware cursor placement.
 
 ## Code boundaries
+
+See the [runtime architecture reference](docs/architecture.md#inspecting-the-live-room)
+for room snapshots, activity subscriptions, and the shared conversation log.
 
 - `src/cli.tsx` handles arguments, onboarding, provider/session wiring, and shutdown.
 - `src/core/` owns room state, the shared log, turn coordination, and call budgets. No React, Ink, provider SDK, or storage imports belong here.

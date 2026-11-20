@@ -1,4 +1,4 @@
-/** Wire-compatible with the EventBus export in jacob/log_usage.txt. */
+/** Wire-compatible with the core LogEvent; see docs/architecture.md#shared-conversation-log. */
 export type LogEvent = {
   readonly id: number;
   readonly text: string;
